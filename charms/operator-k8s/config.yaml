@@ -1,0 +1,346 @@
+# Copyright 2022 Canonical
+# See LICENSE file for licensing details.
+#
+# Learn more about config at: https://juju.is/docs/sdk/config
+
+options:
+  # TODO: handle:
+  # is_leader
+  # patch_sync_id (set an id for each unit)
+  # patch_sync_machine_count_strategy
+  # server_address (and remove server_address config from here)
+  ##########
+  # Server #
+  ##########
+  server-log-level:
+    default: "info"
+    description: > 
+      Loglevel for the server, must be one of:
+      `debug, info, warn, error, dpanic, panic, fatal` 
+    type: string
+  server-url-template:
+    default: ""
+    description: >
+      Template string to use when making URLs for giving back to the client.
+
+      e.g. https://livepatch-hosting.com/v1/patches/{filename}
+
+      This will need to be configured once the url or ip address of the service
+      is known.
+    type: string
+  server-concurrency-limit:
+    default: 50
+    description: Concurrency (green threads) for handling HTTP requests.
+    type: int
+  server-burst-limit:
+    default: 500
+    description: The queue limit, roughly equals - `concurrency-burst_limit`.
+    type: int
+  server-is-hosted:
+    default: false
+    description: Enable configuration blocks specific to canonicals configuration for livepatch.
+    type: boolean
+  ########
+  # Auth #
+  ########
+  auth-basic-enabled:
+    default: false
+    description: >
+      Whether or not to enable basic auth when connecting via
+      the admin tool.
+    type: boolean
+  auth-basic-users:
+    default: ""
+    description: > 
+      A list of user objects that you may use basic auth against
+      May be a comma-separated list of <user>:<bcrypt password hash> pairs
+      or a yaml block denoting the users.
+    type: string
+  auth-sso-enabled:
+    default: false
+    description: >
+      Whether or not to enable SSO auth when connecting via
+      the admin tool.
+    type: boolean
+  auth-sso-url:
+    description: >
+      Location of the sso service. If auth-sso-enabled is false, this
+      config option is ignored.
+    type: string
+    default: "login.ubuntu.com"
+  auth-sso-public-key:
+    description: Public key of the sso service. May be a path to a file or the key itself.
+    type: string
+    default: ""
+  auth-sso-teams:
+    description: >-
+      Comma-separated list of launchpad teams allowed admin access.
+      This is used with SSO authentication.
+    type: string
+    default: ""
+  ##########################################################
+  # Contracts                                              #
+  # Designed to enable overriding the charms static values #
+  # If nil/empty values are used, static values take effect #
+  ##########################################################
+  contracts-enabled:
+    default: false
+    description: Whether or not to enable contracts when validating resource token
+    type: boolean
+  contracts-url:
+    default: "https://contracts.canonical.com"
+    description: Url of contracts service
+    type: string
+  contracts-user:
+    default: ""
+    description: User to use for basic auth
+    type: string
+  contracts-password:
+    default: ""
+    description: Password to use for basic auth
+    type: string
+  ############
+  # Database #
+  ############
+  database-connection-string:
+    default: ""
+    description: > 
+      The connecting string to an postgres instance to use with livepatch server for its store.
+      Defaults to "" which implies use relation.
+    type:
+  database-pool-max:
+    default: 20
+    description: >-
+      Maximum number of database connections in the pool.
+      Should be adjusted according to the postgres config and the
+      number of units running.
+    type: int
+  database-lifetime-max:
+    description: >-
+      Maximum lifetime of a database connection.
+    type: string
+    default: "30m"
+  ###########################################################
+  # Influx                                                  #
+  # Designed to enable overriding the charms static values  #
+  # If nil/empty values are used, static values take effect #
+  ###########################################################
+  influx-enabled:
+    default: false
+    description: Whether or not to enable InfluxDb connectivity for reporting and monitoring
+    type: boolean
+  influx-url:
+    default: ""
+    description: Url of the InfluxDb instance
+    type: string
+  influx-token:
+    default: ""
+    description: Auth token to use
+    type: string
+  influx-bucket:
+    default: ""
+    description: Bucket to access
+    type: string
+  influx-organization:
+    default: ""
+    description: Organisation bucket resides in
+    type: string
+  #################
+  # Patch storage #
+  #################
+  patch-storage-type:
+    default: "filesystem"
+    description: >- 
+      File storage type to use for patch syncs, must be one of: 
+        
+      `filesystem, swift, postgres, s3`
+    type: string
+  patch-storage-filesystem-path:
+    default: "/home/livepatchu/.livepatch/patches"
+    description: "The path to a directory to use for storing patches"
+    type: string
+  patch-storage-swift-username:
+    default: ""
+    description: "The username to use when connecting to swift."
+    type: string
+  patch-storage-swift-api-key:
+    default: ""
+    description: "The programmatic access API key to provide access to your swift bucket."
+    type: string
+  patch-storage-swift-auth-url:
+    default: ""
+    description: "The auth url to hit when attempt authentication with your swift service."
+    type: string
+  patch-storage-swift-domain:
+    default: ""
+    description: "The domain to use where your container and tenacy resides."
+    type: string
+  patch-storage-swift-tenant:
+    default: ""
+    description: "The tenant your domain resides under."
+    type: string
+  patch-storage-swift-container:
+    default: ""
+    description: "The bucket/container in which the patches reside."
+    type: string
+  patch-storage-swift-region:
+    default: ""
+    description: "The region this swift bucket/container resides in."
+    type: string
+  patch-storage-postgres-connection-string:
+    default: ""
+    description: "The connection string to a postgres instance which may be used to store patches."
+    type: string
+  patch-storage-s3-bucket:
+    default: ""
+    description: "The S3 bucket in which the patches reside in."
+    type: string
+  patch-storage-s3-endpoint:
+    default: ""
+    description: "The endpoint to this bucket."
+    type: string
+  patch-storage-s3-region:
+    default: ""
+    description: "The AWS region to use for this bucket."
+    type: string
+  patch-storage-s3-secure:
+    default: false
+    description: "Whether or not to use TLS communication."
+    type: boolean
+  patch-storage-s3-access-key:
+    default: ""
+    description: "The programmatic AWS access key to use."
+    type: string
+  patch-storage-s3-secret-key:
+    default: ""
+    description: "The programmatic AWS secret key to use."
+    type: string
+  ###############
+  # Patch cache #
+  ###############
+  patch-cache-enabled:
+    default: false
+    description: "Whether or not to enable in memory caching for quicker delivery."
+    type: boolean
+  patch-cache-ttl:
+    default: "1h"
+    description: "The TTL of patches in the cache."
+    type: string
+  patch-cache-size:
+    default: 128
+    description: "The maximum size of the cache. Recommended at least 128+."
+    type: int    
+  ##############
+  # Patch sync #
+  ##############
+  patch-sync-enabled:
+    default: false
+    description: "Whether or not to sync patches from an upstream livepatch instance."
+    type: boolean
+  patch-sync-flavours:
+    default: "generic,lowlatency,aws"
+    description: Comma-separated list of kernel flavors to download patches for.
+    type: string
+  patch-sync-download-interval:
+    default: "1h"
+    description: Period between automatic patch snapshot downloads.
+    type: string
+  patch-sync-send-machine-reports:
+    default: false
+    description: Enable sending reports from local machines during patch synchronization.
+    type: boolean
+  patch-sync-token:
+    default: ""
+    description: The token provided by an upstream livepatch server to use for syncing patches.
+    type: string
+  patch-sync-upstream-url:
+    default: "https://livepatch.canonical.com"
+    description: The url of the upstream livepatch instance.
+    type: string
+  ######################
+  # Patch sync (proxy) #
+  ######################
+  patch-sync-proxy-enabled:
+    default: false
+    description: Whether or not to use a proxy when performing livepatch syncs.
+    type: boolean
+  patch-sync-proxy-http:
+    default: ""
+    description: A comma separated list of HTTP proxies.
+    type: string
+  patch-sync-proxy-https:
+    default: ""
+    description: A comma separated list of HTTPS enabled proxies.
+    type: string
+  patch-sync-proxy-no-proxy:
+    default: ""
+    description: A comma-separated list of disallowed domains/inet addr/cidrs.
+    type: string
+  ###################
+  # Patch blocklist #
+  ###################
+  patch-blocklist-enabled:
+    default: false
+    description: Whether or not to enable the blocklist for patches specified via admin tool.
+    type: boolean
+  patch-blocklist-refresh-interval:
+    default: "1hr"
+    description: How often to refresh the blocklist.
+    type: string
+  ###############
+  # KPI reports #
+  ###############
+  kpi-reports-enabled:
+    default: false
+    description: Whether or not to enable KPI & ping reporting. Requires influx to be configured.
+    type: boolean
+  kpi-reports-interval:
+    default: "1hr"
+    description: How often to submit reports.
+    type: string
+  ##############################
+  # Machine reports (postgres) #
+  ##############################
+  machine-reports-db-enabled:
+    default: false
+    description: Whether or not to enable machine reporting to postgres. Reports are stored in the servers postgres store.
+    type: boolean
+  machine-reports-db-retention-days:
+    default: 30
+    description: Retention for the given reports.
+    type: int
+  machine-reports-db-cleanup-row-limit:
+    default: 1000
+    description: Row limitations for cleanup.
+    type: int
+  machine-reports-db-cleanup-interval:
+    default: "6hr"
+    description: How often to perform cleanups.
+    type: string
+  ##############################
+  # Machine reports (eventbus) #
+  ##############################
+  machine-reports-eb-enabled:
+    default: false
+    description: Whether or not to enable machine reporting to eventbus, can be used in tandem with database. Will eventually replace postgres entirely.
+    type: boolean
+  machine-reports-eb-brokers:
+    default: ""
+    description: The kafka broker(s) domain. Comma separated list.
+    type: string
+  machine-reports-eb-client-cert:
+    default: ""
+    description:  Client cert to auth via for mTLS. 
+    type: string
+  machine-reports-eb-client-key:
+    default: ""
+    description: Client private key to auth via for mTLS.
+    type: string
+  machine-reports-eb-ca-cert:
+    default: ""
+    description: The root or intermediate CA to perform verification against.
+    type: string
+  machine-reports-eb-kafka-version:
+    default: ""
+    description: Eventbus kafka version. 
+    type: string
