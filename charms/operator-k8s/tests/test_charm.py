@@ -12,7 +12,6 @@ import ops
 import responses
 from ops.testing import Harness
 from src.charm import LivepatchCharm
-from src.constants import WORKLOAD_CONTAINER
 
 
 class MockOutput:
@@ -222,4 +221,4 @@ class TestCharm(unittest.TestCase):
         exit 0
         '''
         data = bytes(script, 'utf-8')
-        container.push(filename, 'data', make_dirs=True)
+        container.push(filename, data, make_dirs=True)

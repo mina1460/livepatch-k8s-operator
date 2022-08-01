@@ -12,7 +12,6 @@ from autologging import traced
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
-from ops.pebble import ServiceStatus
 
 import utils
 from constants import (LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER,
@@ -261,7 +260,7 @@ class LivepatchCharm(CharmBase):
         # if relation already contains 'schema-created' that
         # means the schema has already been created.
         return bool(peer_relation.data.get(self.app, {}).get('schema-upgraded', False))
-        
+
     def set_resource_token(self, resource_token: str):
         # get the peer relation.
         peer_relation = self.model.get_relation("livepatch")
