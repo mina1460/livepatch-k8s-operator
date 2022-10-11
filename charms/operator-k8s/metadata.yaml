@@ -5,7 +5,7 @@
 # For a complete list of supported options, see:
 # https://juju.is/docs/sdk/metadata-referencename: canonical-livepatch-server
 
-name: livepatch
+name: canonical-livepatch-server-k8s
 summary: Canonical Livepatch Server
 description: |
   The purpose of the Livepatch Server is to pull in patch updates from
