@@ -6,23 +6,24 @@
 
 """Livepatch k8s charm.
 """
-from urllib.parse import urlparse
-
-from autologging import traced
+import pgsql
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from ops import pebble
 from ops.charm import CharmBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 import utils
-from constants import (LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER,
-                       PgIsReadyStates)
+from constants import LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER
+
+SERVER_PORT = 8080
+DATABASE_NAME = "livepatch-server"
 
 
-@traced
 class LivepatchCharm(CharmBase):
-
     def __init__(self, *args):
         super().__init__(*args)
+
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.update_status, self.on_update_status)
         self.framework.observe(self.on.leader_elected, self.on_leader_elected)
@@ -30,10 +31,28 @@ class LivepatchCharm(CharmBase):
         self.framework.observe(self.on.stop, self.on_stop)
 
         self.framework.observe(self.on.restart_action, self.restart_action)
+        self.framework.observe(self.on.schema_upgrade_action, self.schema_upgrade_action)
+        self.framework.observe(self.on.schema_version_action, self.schema_version_check_action)
+
+        self.framework.observe(self.on.get_resource_token_action, self.get_resource_token_action)
+
+        # Database
+        self.db = pgsql.PostgreSQLClient(self, "db")
         self.framework.observe(
-            self.on.schema_upgrade_action, self.schema_upgrade_action)
-        self.framework.observe(
-            self.on.get_resource_token_action, self.get_resource_token_action)
+            self.db.on.database_relation_joined,
+            self._on_database_relation_joined,
+        )
+        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+        self.framework.observe(self.db.on.standby_changed, self._on_standby_changed)
+
+        self.ingress = IngressRequires(
+            self,
+            {
+                "service-hostname": self.config["external_hostname"],
+                "service-name": self.app.name,
+                "service-port": 8080,
+            },
+        )
 
     # Runs first
     def on_config_changed(self, event):
@@ -46,11 +65,11 @@ class LivepatchCharm(CharmBase):
     # Runs third and on any container restarts & does not guarantee the container is "still up"
     # Runs additionally when; a new unit is created, and upgrade-charm has been run
     # def on_pebble_ready(self, event):
+    #    self._update_workload_container_config(event)
 
-    # Runs periodically (5mins by default), supposedly not needed as it was
-    # designed to check service health. Now pebble does this.
-    def on_update_status(self, _):
-        self._ready()
+    def on_update_status(self, event):
+        workload = self.unit.get_container(WORKLOAD_CONTAINER)
+        self._ready(workload)
 
     # Runs AFTER peer-relation-created
     # When a leader loses leadership it only sees the leader-settings-changed
@@ -60,7 +79,7 @@ class LivepatchCharm(CharmBase):
 
     def on_stop(self, _):
         container = self.unit.get_container(WORKLOAD_CONTAINER)
-        if self._ready():
+        if container.can_connect():
             container.stop()
             self.unit.status = WaitingStatus("stopped")
 
@@ -69,30 +88,58 @@ class LivepatchCharm(CharmBase):
         Update workload with all available configuration
         data.
         """
-        container = self.unit.get_container(WORKLOAD_CONTAINER)
+        db_uri = self._get_db_uri()
+        if not db_uri:
+            LOGGER.info("waiting for PG connection string")
+            self.unit.status = BlockedStatus("waiting for pg relation.")
+            event.defer()
+            return
+        schema_container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
+        if not schema_container.can_connect():
+            LOGGER.error("cannot connect to the schema update container")
+            self.unit.status = WaitingStatus("Waiting to connect - schema container.")
+            event.defer()
+            return
 
-        if not self.schema_upgrade_ran():
-            LOGGER.error('waiting for schema upgrade')
-            self.unit.status = BlockedStatus("waiting for schema upgrade")
+        upgrade_required = False
+        try:
+            upgrade_required = self.migration_is_required(schema_container, db_uri)
+        except Exception as e:
+            LOGGER.error("Failed to determe if schema upgrade required.")
+            LOGGER.error(e)
+            return
+        if upgrade_required:
+            if self.unit.is_leader():
+                self.schema_upgrade(schema_container, db_uri)
+            else:
+                LOGGER.error("waiting for schema upgrade")
+                self.unit.status = WaitingStatus("waiting for schema upgrade")
+                event.defer()
+                return
 
-        env_vars = utils.map_config_to_env_vars(
-            self, LP_SERVER_ADDRESS=":8081")
+        workload_container = self.unit.get_container(WORKLOAD_CONTAINER)
 
-        env_vars['PATCH_SYNC_TOKEN'] = self.get_resource_token()
+        env_vars = utils.map_config_to_env_vars(self)
+
+        # Some extra config
+        env_vars["PATCH_SYNC_TOKEN"] = self.get_resource_token()
+        env_vars["LP_DATABASE_CONNECTION_STRING"] = db_uri
+        env_vars["LP_SERVER_SERVER_ADDRESS"] = f":{SERVER_PORT}"
+        if self.config.get("patch-sync.enabled") is True:
+            # TODO: Find a better way to identify a on-prem syncing instance.
+            env_vars["LP_PATCH_SYNC_ID"] = self.model.uuid
 
         # remove empty environment values
         env_vars = {key: value for key, value in env_vars.items() if value}
-
-        if container.can_connect():
+        if workload_container.can_connect():
             update_config_environment_layer = {
-                "summary": "Livepatch Service",
-                "description": "Pebble config layer for livepatch",
                 "services": {
                     "livepatch": {
-                        "override": "merge",
                         "summary": "Livepatch Service",
-                        "command": "/usr/local/bin/livepatch-server",
+                        "description": "Pebble config layer for livepatch",
+                        "override": "merge",
                         "startup": "disabled",
+                        "command": "/usr/local/bin/livepatch-server",
                         "environment": env_vars,
                     },
                 },
@@ -100,45 +147,93 @@ class LivepatchCharm(CharmBase):
                     "livepatch-check": {
                         "override": "replace",
                         "period": "1m",
-                        "http": {
-                            "url": "http://localhost:8081/debug/status"
-                        }
+                        "http": {"url": f"http://localhost:{SERVER_PORT}/debug/status"},
                     }
-                }
+                },
             }
 
-            container.add_layer(
-                "livepatch", update_config_environment_layer, combine=True)
-            if self._ready():
-                if container.get_service("livepatch").is_running():
-                    container.replan()
+            workload_container.add_layer("livepatch", update_config_environment_layer, combine=True)
+            if self._ready(workload_container):
+                if workload_container.get_service("livepatch").is_running():
+                    workload_container.replan()
                 else:
-                    container.start('livepatch')
+                    workload_container.start("livepatch")
+            else:
+                self.unit.status = WaitingStatus("Service is not ready")
+                return
         else:
-            LOGGER.info("workload container not ready - defering")
+            LOGGER.info("workload container not ready - deferring")
+            self.unit.status = WaitingStatus("Waiting to connect - workload container")
             event.defer()
+            return
 
-    def _ready(self):
-        if not self.schema_upgrade_ran():
-            self.unit.status = WaitingStatus("waiting for schema upgrade")
-            return False
+        self.unit.status = ActiveStatus()
 
-        container = self.unit.get_container(WORKLOAD_CONTAINER)
-
-        if container.can_connect():
-            plan = container.get_plan()
+    def _ready(self, workload_container):
+        if workload_container.can_connect():
+            plan = workload_container.get_plan()
             if plan.services.get("livepatch") is None:
-                LOGGER.error("waiting for service")
-                self.unit.status = WaitingStatus("waiting for service")
+                LOGGER.info("livepatch service is not ready yet")
                 return False
-
-            if container.get_service("livepatch").is_running():
-                self.unit.status = ActiveStatus("running")
+            if workload_container.get_service("livepatch").is_running():
+                self.unit.status = ActiveStatus()
             return True
         else:
             LOGGER.error("cannot connect to workload container")
-            self.unit.status = WaitingStatus("waiting for livepatch workload")
             return False
+
+    # Database
+
+    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent) -> None:
+        """
+        Handles determining if the database has finished setup, once setup is complete
+        a master/standby may join / change in consequent events.
+        """
+        LOGGER.info("(postgresql) RELATION_JOINED event fired.")
+
+        if self.model.unit.is_leader():
+            # Handle database configurations / changes here!
+            event.database = DATABASE_NAME
+        elif event.database != DATABASE_NAME:
+            event.defer()
+
+    def _on_master_changed(self, event: pgsql.MasterChangedEvent) -> None:
+        """
+        Handles master units of postgres joining / changing.
+        The internal snap configuration is updated to reflect this.
+        """
+        LOGGER.info("(postgresql) MASTER_CHANGED event fired.")
+
+        if event.database != DATABASE_NAME:
+            LOGGER.debug("Database setup not complete yet, returning.")
+            return
+
+        if self.model.unit.is_leader():
+            self.set_status_and_log("Updating application database connection...", WaitingStatus)
+            peer_relation = self.model.get_relation("livepatch")
+            if not peer_relation:
+                raise ValueError("Peer relation not found")
+            conn_str = None if event.master is None else event.master.conn_str
+            db_uri = None if event.master is None else event.master.uri
+            if conn_str:
+                peer_relation.data[self.app].update({"conn-str": conn_str})
+            if db_uri:
+                peer_relation.data[self.app].update({"db-uri": db_uri})
+
+        self.on_config_changed(event)
+
+    def _on_standby_changed(self, event: pgsql.StandbyChangedEvent):
+        LOGGER.info("(postgresql) STANDBY_CHANGED event fired.")
+        # NOTE NOTE NOTE
+        # This should be used for none-master on-prem instances when configuring
+        # additional livepatch instances, enabling us to read from standbys
+        if event.database != DATABASE_NAME:
+            # Leader has not yet set requirements. Wait until next event,
+            # or risk connecting to an incorrect database.
+            return
+
+        # If read only replicas are desired, these urls should be added to
+        # the peer relation e.g. peer = `[c.uri for c in event.standbys]`
 
     # Actions
     def restart_action(self, event):
@@ -146,120 +241,110 @@ class LivepatchCharm(CharmBase):
         Restarts the workload container
         """
         container = self.unit.get_container(WORKLOAD_CONTAINER)
-        if self.can_connect() and self._ready():
+        if container.can_connect() and container.get_service("livepatch").is_running():
             container.restart()
 
     def schema_upgrade_action(self, event):
+        db_uri = self._get_db_uri()
+        container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
+        if not db_uri:
+            LOGGER.error("DB connection string not set")
+            return
+        if not container.can_connect():
+            LOGGER.error("Cannot connect to the schema update container")
+            return
+        self.schema_upgrade(container, db_uri)
+
+    def schema_upgrade(self, container, conn_str):
         """
         Performs a schema upgrade on the configurable database
         """
         if not self.unit.is_leader():
+            LOGGER.warning("Attempted to run schema upgrade on non-leader unit. Skipping.")
             return
 
+        self.unit.status = WaitingStatus("pg connection successful, attempting upgrade")
+        if not container.exists("/usr/local/bin/livepatch-schema-tool"):
+            LOGGER.error("livepatch-schema-tool not found in the schema upgrade container")
+            self.unit.status = BlockedStatus("Cannot find schema upgrade tool")
+            return
+
+        process = None
+        try:
+            process = container.exec(
+                command=[
+                    "/usr/local/bin/livepatch-schema-tool",
+                    "upgrade",
+                    "/etc/livepatch/schema-upgrades",
+                    "--db",
+                    conn_str,
+                ],
+            )
+        except pebble.APIError as e:
+            LOGGER.error(e)
+            self.unit.status = BlockedStatus("Schema migration failed")
+            return
+
+        try:
+            stdout, _ = process.wait_output()
+            LOGGER.info(stdout)
+            self.unit.status = WaitingStatus("Schema migration done")
+        except pebble.ExecError as e:
+            LOGGER.error(e)
+            LOGGER.error("Exited with code %d. Stderr:", e.exit_code)
+            for line in e.stderr.splitlines():
+                LOGGER.error("    %s", line)
+            self.unit.status = BlockedStatus("Schema migration failed - executing migration failed")
+            return
+
+    def schema_version_check_action(self, event) -> str:
+        db_uri = self._get_db_uri()
         container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
         if not container.can_connect():
             LOGGER.error("cannot connect to the schema update container")
             return
+        self.migration_is_required(container, db_uri)
 
-        if not container.exists('/usr/bin/pg_isready'):
-            LOGGER.error(
-                'pg_isready not found in the schema upgrade container')
-            self.unit.status = BlockedStatus("cannot run schema upgrade")
-            return
+    def migration_is_required(self, container, conn_str: str) -> bool:
+        if not self.unit.is_leader():
+            LOGGER.warning("Schema check skipped, can only run on leader.")
+            return None
 
-        conn_string = self.config.get("database-connection-string")
-        if not conn_string:
-            LOGGER.error(
-                'database-connection-string not specified: cannot run schema upgrade')
-            self.unit.status = BlockedStatus(
-                "database-connection-string not specified")
-            return
-        parsed_conn_string = urlparse(conn_string)
+        """Runs a schema version check against the database"""
+        if not container.exists("/usr/local/bin/livepatch-schema-tool"):
+            LOGGER.error("livepatch-schema-tool not found in the schema upgrade container")
+            raise ValueError("Failed to find schema tool")
 
-        db_ready_process = container.exec(command=['/usr/bin/pg_isready'], environment={
-            'PGUSER': parsed_conn_string.username,
-            'PGPASSWORD': parsed_conn_string.password,
-            'PGHOST': parsed_conn_string.hostname,
-            'PGPORT': parsed_conn_string.port,
-            'PGDATABASE': parsed_conn_string.path[1:]
-        })
+        if not conn_str:
+            LOGGER.error("Database connection string not found")
+            raise ValueError("Database connection string is None")
 
-        stdout, stderr = db_ready_process.wait_output()
-        if stdout == PgIsReadyStates.CONNECTED:
-            self.unit.status = WaitingStatus(
-                "pg connection successful, attempting upgrade")
-            if not container.exists('/usr/local/bin/livepatch-schema-tool'):
-                LOGGER.error(
-                    'livepatch-schema-tool not found in the schema upgrade container')
-                self.unit.status = BlockedStatus(
-                    "cannot run schema upgrade tool")
-                return
+        process = None
+        try:
+            process = container.exec(
+                command=[
+                    "/usr/local/bin/livepatch-schema-tool",
+                    "check",
+                    "/etc/livepatch/schema-upgrades",
+                    "--db",
+                    conn_str,
+                ],
+            )
+        except pebble.APIError as e:
+            LOGGER.error(e)
+            raise e
 
-            # postgresql is ready: execute the livepatch-schema-tool upgrade
-            process = container.exec(command=[
-                "/usr/local/bin/livepatch-schema-tool upgrade /usr/src/livepatch/schema-upgrades"
-            ], environment={
-                "DB": conn_string
-            })
-            _, stderr = process.wait_output()
-            if stderr != "":
-                self.unit.status = BlockedStatus(
-                    "Failed to run schema migration")
-                event.set_results({'error': 'err'})
-                return
-            else:
-                self.unit.status = WaitingStatus("Schema migration done")
-                event.set_results({'result': 'done'})
-                self.set_schema_upgrade_ran()
-
-        elif stdout == PgIsReadyStates.REJECTED:
-            self.unit.status = WaitingStatus(
-                'server rejected connection, may be starting up')
-            LOGGER.error('server rejected connection, may be starting up')
-            event.set_results(
-                {'error': 'server rejected connection, may be starting up'})
-            return
-        elif stdout == PgIsReadyStates.NO_RESPONSE:
-            self.unit.status = BlockedStatus(
-                'no response at specified address, please check your db configuration')
-            LOGGER.error(stderr)
-            event.set_results(
-                {'error': 'no response at specified address, please check your db configuration'})
-            return
-        elif stdout == PgIsReadyStates.NO_ATTEMPT:
-            self.unit.status = BlockedStatus(
-                'invalid parameters - something went wrong in the charm code')
-            LOGGER.error(stderr)
-            event.set_results(
-                {'error': 'invalid parameters - something went wrong in the charm code'})
-            return
-        else:
-            self.unit.status = BlockedStatus(
-                "something went wrong in the charm code")
-            LOGGER.error(stderr)
-            event.set_results({'error': stderr})
-            return
-
-        self._update_workload_container_config(event)
-
-    def set_schema_upgrade_ran(self):
-        # get the peer relation.
-        peer_relation = self.model.get_relation("livepatch")
-        # if it does not exist, return.
-        if not peer_relation:
-            return
-
-        peer_relation.data[self.app].update({'schema-upgraded': 'done'})
-
-    def schema_upgrade_ran(self) -> bool:
-        # get the peer relation.
-        peer_relation = self.model.get_relation("livepatch")
-        # if it does not exist, return.
-        if not peer_relation:
+        stdout = None
+        try:
+            stdout, _ = process.wait_output()
+            LOGGER.info("Schema is up to date.")
+            LOGGER.info(stdout)
             return False
-        # if relation already contains 'schema-created' that
-        # means the schema has already been created.
-        return bool(peer_relation.data.get(self.app, {}).get('schema-upgraded', False))
+        except pebble.ExecError as e:
+            # If command has a non-zero exit code then migrations are pending.
+            LOGGER.info("Migrations pending")
+            LOGGER.info(e.stderr)
+            return True
 
     def set_resource_token(self, resource_token: str):
         # get the peer relation.
@@ -267,52 +352,64 @@ class LivepatchCharm(CharmBase):
         # if it does not exist, return.
         if not peer_relation:
             return False
-        peer_relation.data[self.app].update({'resource-token': resource_token})
+        peer_relation.data[self.app].update({"resource-token": resource_token})
 
     def get_resource_token(self) -> str:
         # get the peer relation.
         peer_relation = self.model.get_relation("livepatch")
         # if it does not exist, return.
         if not peer_relation:
-            return ''
-        return peer_relation.data.get(self.app, {}).get('resource-token', None)
+            return ""
+        return peer_relation.data.get(self.app, {}).get("resource-token", None)
 
     def get_resource_token_action(self, event):
         """
         Retrieves the livepatch resource token from ua-contracts.
         """
         if not self.unit.is_leader():
-            LOGGER.error(
-                'cannot fetch the resource token: unit is not the leader')
-            event.set_results(
-                {'error': 'cannot fetch the resource token: unit is not the leader'})
+            LOGGER.error("cannot fetch the resource token: unit is not the leader")
+            event.set_results({"error": "cannot fetch the resource token: unit is not the leader"})
             return
 
-        peer_relation = self.model.get_relation('livepatch')
+        peer_relation = self.model.get_relation("livepatch")
         if not peer_relation:
-            LOGGER.error(
-                'cannot fetch the resource token: peer relation not ready')
-            event.set_results(
-                {'error': 'cannot fetch the resource token: peer relation not ready'})
+            LOGGER.error("cannot fetch the resource token: peer relation not ready")
+            event.set_results({"error": "cannot fetch the resource token: peer relation not ready"})
             return
 
-        contract_token = event.params.get('contract-token', '')
+        contract_token = event.params.get("contract-token", "")
         proxies = utils.get_proxy_dict(self.config)
-        contracts_url = self.config.get('contracts-url', '')
-        machine_token = utils.get_machine_token(
-            contract_token, contracts_url=contracts_url, proxies=proxies)
+        contracts_url = self.config.get("contracts-url", "")
+        machine_token = utils.get_machine_token(contract_token, contracts_url=contracts_url, proxies=proxies)
 
         if not machine_token:
-            LOGGER.error('failed to retrieve the machine token')
-            event.set_results(
-                {'error': 'cannot fetch the resource token: failed to fetch the machine token'})
+            LOGGER.error("failed to retrieve the machine token")
+            event.set_results({"error": "cannot fetch the resource token: failed to fetch the machine token"})
             return
 
-        resource_token = utils.get_resource_token(
-            machine_token, contracts_url=contracts_url, proxies=proxies)
+        resource_token = utils.get_resource_token(machine_token, contracts_url=contracts_url, proxies=proxies)
 
         self.set_resource_token(resource_token)
-        event.set_results({'result': 'resource token set'})
+        event.set_results({"result": "resource token set"})
+
+    def _get_db_uri(self) -> str:
+        """Get connection string"""
+        peer_relation = self.model.get_relation("livepatch")
+        if not peer_relation:
+            LOGGER.error("Failed to get peer relation")
+            return None
+        LOGGER.info(f"New Peer relation data = {peer_relation.data}")
+        db_uri = peer_relation.data.get(self.app, {}).get("db-uri", None)
+        if db_uri:
+            db_uri = str(db_uri).split("?", 1)[0]
+        return db_uri
+
+    def set_status_and_log(self, msg, status) -> None:
+        """
+        A simple wrapper to log and set unit status simultaneously.
+        """
+        LOGGER.info(msg)
+        self.unit.status = status(msg)
 
 
 if __name__ == "__main__":

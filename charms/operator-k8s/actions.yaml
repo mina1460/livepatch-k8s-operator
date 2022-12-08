@@ -1,10 +1,13 @@
-# Copyright 2022 Canonical  
+# Copyright 2022 Canonical
 # See LICENSE file for licensing details.
 #
 # Learn more about actions at: https://juju.is/docs/sdk/actions
 
 schema-upgrade:
   description: Upgrade the application database schema.
+
+schema-version:
+  description: Print the current schema version to the logs.
 
 restart:
   description: Restart livepatch service.
@@ -15,4 +18,4 @@ get-resource-token:
     contract-token:
       type: string
       default: ""
-  required: ['contract-token']
+  required: ["contract-token"]

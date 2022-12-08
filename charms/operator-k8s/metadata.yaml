@@ -1,4 +1,3 @@
-
 # Copyright 2022 Canonical
 # See LICENSE file for licensing details.
 #
@@ -6,6 +5,7 @@
 # https://juju.is/docs/sdk/metadata-referencename: canonical-livepatch-server
 
 name: canonical-livepatch-server-k8s
+display-name: livepatch-server
 summary: Canonical Livepatch Server
 description: |
   The purpose of the Livepatch Server is to pull in patch updates from
@@ -24,6 +24,13 @@ tags:
 peers:
   livepatch:
     interface: livepatch
+
+requires:
+  db:
+    interface: pgsql
+    limit: 1 # Most charms only handle a single PostgreSQL Application.
+  ingress:
+    interface: ingress
 
 containers:
   livepatch:
