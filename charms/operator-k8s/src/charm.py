@@ -80,7 +80,7 @@ class LivepatchCharm(CharmBase):
     def on_stop(self, _):
         container = self.unit.get_container(WORKLOAD_CONTAINER)
         if container.can_connect():
-            container.stop()
+            container.stop("livepatch")
             self.unit.status = WaitingStatus("stopped")
 
     def _update_workload_container_config(self, event):
@@ -341,10 +341,14 @@ class LivepatchCharm(CharmBase):
             LOGGER.info(stdout)
             return False
         except pebble.ExecError as e:
-            # If command has a non-zero exit code then migrations are pending.
-            LOGGER.info("Migrations pending")
             LOGGER.info(e.stderr)
-            return True
+            if e.exit_code == 2:
+                # If command has a non-zero exit code then migrations are pending.
+                LOGGER.info("Migrations pending")
+                return True
+            else:
+                # Other exit codes indicate a problem
+                raise e
 
     def set_resource_token(self, resource_token: str):
         # get the peer relation.
