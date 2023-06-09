@@ -4,6 +4,8 @@ import pytest_asyncio
 from ops.model import ActiveStatus
 from pytest_operator.plugin import OpsTest
 
+from utils import fetch_charm
+
 logger = logging.getLogger(__name__)
 APP_NAME = "livepatch"
 DB_NAME = "postgresql"
@@ -12,9 +14,9 @@ DB_NAME = "postgresql"
 @pytest_asyncio.fixture(scope="module")
 async def app(ops_test: OpsTest):
     logger.info("Building local charm")
-    charm = await ops_test.build_charm(".")
+    charm = await fetch_charm(ops_test)
     resources = {
-        "livepatch-server-image": "localhost:32000/livepatch:latest",
+        "livepatch-server-image": "localhost:32000/livepatch-server:latest",
         "livepatch-schema-upgrade-tool-image": "localhost:32000/livepatch-schema-tool:latest",
     }
     config = {"server.url-template": "https://localhost:8080/{filename}"}

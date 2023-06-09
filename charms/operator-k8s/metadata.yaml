@@ -42,6 +42,8 @@ resources:
   livepatch-server-image:
     type: oci-image
     description: OCI Image for Livepatch Server
+    upstream-source: livepatch-server:latest
   livepatch-schema-upgrade-tool-image:
     type: oci-image
     description: OCI Image for Schema upgrade tool
+    upstream-source: livepatch-schema-tool:latest

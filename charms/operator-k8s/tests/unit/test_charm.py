@@ -21,7 +21,6 @@ class MockOutput:
         self._stderr = stderr
 
     def wait_output(self):
-
         return self._stdout, self._stderr
 
 
@@ -52,7 +51,6 @@ class TestCharm(unittest.TestCase):
         self.harness.container_pebble_ready("livepatch-schema-upgrade")
 
     def test_on_config_changed(self):
-
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
