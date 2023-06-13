@@ -6,7 +6,7 @@
 import pathlib
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from ops.testing import Harness
 
@@ -104,3 +104,40 @@ class TestCharm(unittest.TestCase):
 
         value = self.harness.charm.get_resource_token()
         self.assertEqual(value, "test-resource-token")
+
+    @patch("src.charm.LivepatchCharm._get_logrotate_config")
+    @patch("src.charm.LivepatchCharm.migration_is_required")
+    def test_logrotate_config_pushed(self, migration, get_logrotate_config: MagicMock):
+        migration.return_value = False
+        self.harness.set_leader(True)
+
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, "canonical-livepatch-server-k8s/1")
+
+        self.harness.update_relation_data(
+            rel_id,
+            APP_NAME,
+            {
+                "schema-upgraded": "done",
+                "resource-token": "test-token",
+                "db-uri": "postgres://123",
+            },
+        )
+
+        container = self.harness.model.unit.get_container("livepatch")
+        self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        self.harness.update_config(
+            {
+                "auth.sso.enabled": True,
+                "patch-storage.type": "filesystem",
+                "patch-storage.filesystem-path": "/srv/",
+                "patch-cache.enabled": True,
+            }
+        )
+        self.harness.charm.on.config_changed.emit()
+
+        # Emit the pebble-ready event for livepatch
+        self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        get_logrotate_config.assert_called_once()

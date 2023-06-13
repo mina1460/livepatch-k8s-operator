@@ -25,12 +25,22 @@ peers:
   livepatch:
     interface: livepatch
 
+provides:
+  grafana-dashboard:
+    interface: grafana_dashboard
+  metrics-endpoint:
+    interface: prometheus_scrape
+
 requires:
   db:
     interface: pgsql
     limit: 1 # Most charms only handle a single PostgreSQL Application.
   ingress:
     interface: ingress
+  log-proxy:
+    interface: loki_push_api
+    optional: true
+    limit: 1
 
 containers:
   livepatch:
@@ -47,3 +57,8 @@ resources:
     type: oci-image
     description: OCI Image for Schema upgrade tool
     upstream-source: livepatch-schema-tool:latest
+  # Temporary workaround until pebble can forward logs to Loki directly.
+  promtail-bin:
+    type: file
+    description: Promtail binary for logging
+    filename: promtail-linux

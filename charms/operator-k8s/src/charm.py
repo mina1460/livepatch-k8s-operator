@@ -7,7 +7,10 @@
 """Livepatch k8s charm.
 """
 import pgsql
+from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
+from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
+from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops import pebble
 from ops.charm import CharmBase
 from ops.main import main
@@ -18,6 +21,8 @@ from constants import LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER
 
 SERVER_PORT = 8080
 DATABASE_NAME = "livepatch-server"
+LOG_FILE = "/var/log/livepatch"
+LOGROTATE_CONFIG_PATH = "/etc/logrotate.d/livepatch"
 
 
 class LivepatchCharm(CharmBase):
@@ -54,6 +59,28 @@ class LivepatchCharm(CharmBase):
             },
         )
 
+        # Loki log-proxy relation
+        self.log_proxy = LogProxyConsumer(
+            self,
+            log_files=[LOG_FILE],
+            relation_name="log-proxy",
+            promtail_resource_name="promtail-bin",
+            container_name=WORKLOAD_CONTAINER,
+        )
+
+        # Prometheus metrics endpoint relation
+        self.metrics_endpoint = MetricsEndpointProvider(
+            self,
+            jobs=[{"static_configs": [{"targets": [f"*:{SERVER_PORT}"]}]}],
+            refresh_event=self.on.config_changed,
+            relation_name="metrics-endpoint",
+        )
+
+        # Grafana dashboard relation
+        self._grafana_dashboards = GrafanaDashboardProvider(
+            self, relation_name="grafana-dashboard", dashboards_path="./grafana_dashboards"
+        )
+
     # Runs first
     def on_config_changed(self, event):
         self._update_workload_container_config(event)
@@ -88,6 +115,10 @@ class LivepatchCharm(CharmBase):
         Update workload with all available configuration
         data.
         """
+
+        # Quickly update logrotates config each workload update
+        self._push_to_workload(LOGROTATE_CONFIG_PATH, self._get_logrotate_config(), event)
+
         db_uri = self._get_db_uri()
         if not db_uri:
             LOGGER.info("waiting for PG connection string")
@@ -139,7 +170,7 @@ class LivepatchCharm(CharmBase):
                         "description": "Pebble config layer for livepatch",
                         "override": "merge",
                         "startup": "disabled",
-                        "command": "/usr/local/bin/livepatch-server",
+                        "command": "sh -c '/usr/local/bin/livepatch-server | tee {LOG_FILE}'",
                         "environment": env_vars,
                     },
                 },
@@ -414,6 +445,31 @@ class LivepatchCharm(CharmBase):
         """
         LOGGER.info(msg)
         self.unit.status = status(msg)
+
+    def _get_logrotate_config(self):
+        return f"""{LOG_FILE} {"{"}
+            rotate 3
+            daily
+            compress
+            delaycompress
+            missingok
+            notifempty
+            size 10M
+{"}"}
+"""
+
+    def _push_to_workload(self, filename, content, event):
+        """Create file on the workload container with
+        the specified content."""
+
+        container = self.unit.get_container(WORKLOAD_CONTAINER)
+        if container.can_connect():
+            LOGGER.info("pushing file {} to the workload container".format(filename))
+            container.push(filename, content, make_dirs=True)
+        else:
+            LOGGER.info("workload container not ready - defering")
+            event.defer()
+            return
 
 
 if __name__ == "__main__":
