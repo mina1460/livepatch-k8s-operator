@@ -241,7 +241,7 @@ class LivepatchCharm(CharmBase):
         # get the first endpoint from a comma separate list
         ep = event.endpoints.split(",", 1)[0]
         # compose the db connection string
-        uri = f"postgresql://{event.username}:{event.password}@{ep}/jimm"
+        uri = f"postgresql://{event.username}:{event.password}@{ep}/{DATABASE_NAME}"
 
         LOGGER.info("received database uri: {}".format(uri))
 
