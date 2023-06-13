@@ -55,11 +55,8 @@ class TestCharm(unittest.TestCase):
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
 
-        self.harness.update_relation_data(
-            rel_id,
-            APP_NAME,
-            {"schema-upgraded": "done", "resource-token": "test-token", "db-uri": "postgres://123"},
-        )
+        self.harness.charm._state.dsn = "postgres://123"
+        self.harness.charm._state.resource_token = "test-token"
 
         container = self.harness.model.unit.get_container("livepatch")
         with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
@@ -91,20 +88,6 @@ class TestCharm(unittest.TestCase):
         environment = plan.to_dict()["services"]["livepatch"]["environment"]
         self.assertEqual(environment, environment | required_environment)
 
-    def test_peer_relation_resource_token(self):
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
-
-        self.harness.set_leader(True)
-
-        value = self.harness.charm.get_resource_token()
-        self.assertEqual(value, None)
-
-        self.harness.charm.set_resource_token("test-resource-token")
-
-        value = self.harness.charm.get_resource_token()
-        self.assertEqual(value, "test-resource-token")
-
     @patch("src.charm.LivepatchCharm._get_logrotate_config")
     @patch("src.charm.LivepatchCharm.migration_is_required")
     def test_logrotate_config_pushed(self, migration, get_logrotate_config: MagicMock):
@@ -114,15 +97,8 @@ class TestCharm(unittest.TestCase):
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, "canonical-livepatch-server-k8s/1")
 
-        self.harness.update_relation_data(
-            rel_id,
-            APP_NAME,
-            {
-                "schema-upgraded": "done",
-                "resource-token": "test-token",
-                "db-uri": "postgres://123",
-            },
-        )
+        self.harness.charm._state.dsn = "postgres://123"
+        self.harness.charm._state.resource_token = "test-token"
 
         container = self.harness.model.unit.get_container("livepatch")
         self.harness.charm.on.livepatch_pebble_ready.emit(container)

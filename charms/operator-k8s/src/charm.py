@@ -6,7 +6,7 @@
 
 """Livepatch k8s charm.
 """
-import pgsql
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
@@ -18,6 +18,7 @@ from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
 
 import utils
 from constants import LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER
+from state import State
 
 SERVER_PORT = 8080
 DATABASE_NAME = "livepatch-server"
@@ -28,6 +29,8 @@ LOGROTATE_CONFIG_PATH = "/etc/logrotate.d/livepatch"
 class LivepatchCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
+
+        self._state = State(self.app, lambda: self.model.get_relation("livepatch"))
 
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.update_status, self.on_update_status)
@@ -42,14 +45,16 @@ class LivepatchCharm(CharmBase):
         self.framework.observe(self.on.get_resource_token_action, self.get_resource_token_action)
 
         # Database
-        self.db = pgsql.PostgreSQLClient(self, "db")
-        self.framework.observe(
-            self.db.on.database_relation_joined,
-            self._on_database_relation_joined,
+        self.database = DatabaseRequires(
+            self,
+            relation_name="database",
+            database_name=DATABASE_NAME,
         )
-        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
-        self.framework.observe(self.db.on.standby_changed, self._on_standby_changed)
-
+        self.framework.observe(self.database.on.database_created, self._on_database_event)
+        self.framework.observe(
+            self.database.on.endpoints_changed,
+            self._on_database_event,
+        )
         self.ingress = IngressRequires(
             self,
             {
@@ -116,11 +121,16 @@ class LivepatchCharm(CharmBase):
         data.
         """
 
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
         # Quickly update logrotates config each workload update
         self._push_to_workload(LOGROTATE_CONFIG_PATH, self._get_logrotate_config(), event)
 
-        db_uri = self._get_db_uri()
-        if not db_uri:
+        dsn = self._state.dsn
+        if not dsn:
             LOGGER.info("waiting for PG connection string")
             self.unit.status = BlockedStatus("waiting for pg relation.")
             event.defer()
@@ -134,14 +144,14 @@ class LivepatchCharm(CharmBase):
 
         upgrade_required = False
         try:
-            upgrade_required = self.migration_is_required(schema_container, db_uri)
+            upgrade_required = self.migration_is_required(schema_container, dsn)
         except Exception as e:
             LOGGER.error("Failed to determe if schema upgrade required.")
             LOGGER.error(e)
             return
         if upgrade_required:
             if self.unit.is_leader():
-                self.schema_upgrade(schema_container, db_uri)
+                self.schema_upgrade(schema_container, dsn)
             else:
                 LOGGER.error("waiting for schema upgrade")
                 self.unit.status = WaitingStatus("waiting for schema upgrade")
@@ -153,8 +163,8 @@ class LivepatchCharm(CharmBase):
         env_vars = utils.map_config_to_env_vars(self)
 
         # Some extra config
-        env_vars["PATCH_SYNC_TOKEN"] = self.get_resource_token()
-        env_vars["LP_DATABASE_CONNECTION_STRING"] = db_uri
+        env_vars["PATCH_SYNC_TOKEN"] = self._state.resource_token
+        env_vars["LP_DATABASE_CONNECTION_STRING"] = dsn
         env_vars["LP_SERVER_SERVER_ADDRESS"] = f":{SERVER_PORT}"
         if self.config.get("patch-sync.enabled") is True:
             # TODO: Find a better way to identify a on-prem syncing instance.
@@ -215,56 +225,30 @@ class LivepatchCharm(CharmBase):
 
     # Database
 
-    def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent) -> None:
-        """
-        Handles determining if the database has finished setup, once setup is complete
-        a master/standby may join / change in consequent events.
-        """
+    def _on_database_event(self, event) -> None:
+        """Database event handler."""
+
+        if not self.model.unit.is_leader():
+            return
+
         LOGGER.info("(postgresql) RELATION_JOINED event fired.")
 
-        if self.model.unit.is_leader():
-            # Handle database configurations / changes here!
-            event.database = DATABASE_NAME
-        elif event.database != DATABASE_NAME:
+        if not self._state.is_ready():
             event.defer()
-
-    def _on_master_changed(self, event: pgsql.MasterChangedEvent) -> None:
-        """
-        Handles master units of postgres joining / changing.
-        The internal snap configuration is updated to reflect this.
-        """
-        LOGGER.info("(postgresql) MASTER_CHANGED event fired.")
-
-        if event.database != DATABASE_NAME:
-            LOGGER.debug("Database setup not complete yet, returning.")
+            LOGGER.warning("State is not ready")
             return
 
-        if self.model.unit.is_leader():
-            self.set_status_and_log("Updating application database connection...", WaitingStatus)
-            peer_relation = self.model.get_relation("livepatch")
-            if not peer_relation:
-                raise ValueError("Peer relation not found")
-            conn_str = None if event.master is None else event.master.conn_str
-            db_uri = None if event.master is None else event.master.uri
-            if conn_str:
-                peer_relation.data[self.app].update({"conn-str": conn_str})
-            if db_uri:
-                peer_relation.data[self.app].update({"db-uri": db_uri})
+        # get the first endpoint from a comma separate list
+        ep = event.endpoints.split(",", 1)[0]
+        # compose the db connection string
+        uri = f"postgresql://{event.username}:{event.password}@{ep}/jimm"
 
-        self.on_config_changed(event)
+        LOGGER.info("received database uri: {}".format(uri))
 
-    def _on_standby_changed(self, event: pgsql.StandbyChangedEvent):
-        LOGGER.info("(postgresql) STANDBY_CHANGED event fired.")
-        # NOTE NOTE NOTE
-        # This should be used for none-master on-prem instances when configuring
-        # additional livepatch instances, enabling us to read from standbys
-        if event.database != DATABASE_NAME:
-            # Leader has not yet set requirements. Wait until next event,
-            # or risk connecting to an incorrect database.
-            return
+        # record the connection string
+        self._state.dsn = uri
 
-        # If read only replicas are desired, these urls should be added to
-        # the peer relation e.g. peer = `[c.uri for c in event.standbys]`
+        self._update_workload(event)
 
     # Actions
     def restart_action(self, event):
@@ -381,22 +365,6 @@ class LivepatchCharm(CharmBase):
                 # Other exit codes indicate a problem
                 raise e
 
-    def set_resource_token(self, resource_token: str):
-        # get the peer relation.
-        peer_relation = self.model.get_relation("livepatch")
-        # if it does not exist, return.
-        if not peer_relation:
-            return False
-        peer_relation.data[self.app].update({"resource-token": resource_token})
-
-    def get_resource_token(self) -> str:
-        # get the peer relation.
-        peer_relation = self.model.get_relation("livepatch")
-        # if it does not exist, return.
-        if not peer_relation:
-            return ""
-        return peer_relation.data.get(self.app, {}).get("resource-token", None)
-
     def get_resource_token_action(self, event):
         """
         Retrieves the livepatch resource token from ua-contracts.
@@ -406,8 +374,7 @@ class LivepatchCharm(CharmBase):
             event.set_results({"error": "cannot fetch the resource token: unit is not the leader"})
             return
 
-        peer_relation = self.model.get_relation("livepatch")
-        if not peer_relation:
+        if not self._state.is_ready():
             LOGGER.error("cannot fetch the resource token: peer relation not ready")
             event.set_results({"error": "cannot fetch the resource token: peer relation not ready"})
             return
@@ -424,20 +391,9 @@ class LivepatchCharm(CharmBase):
 
         resource_token = utils.get_resource_token(machine_token, contracts_url=contracts_url, proxies=proxies)
 
-        self.set_resource_token(resource_token)
-        event.set_results({"result": "resource token set"})
+        self._state.resource_token = resource_token
 
-    def _get_db_uri(self) -> str:
-        """Get connection string"""
-        peer_relation = self.model.get_relation("livepatch")
-        if not peer_relation:
-            LOGGER.error("Failed to get peer relation")
-            return None
-        LOGGER.info(f"New Peer relation data = {peer_relation.data}")
-        db_uri = peer_relation.data.get(self.app, {}).get("db-uri", None)
-        if db_uri:
-            db_uri = str(db_uri).split("?", 1)[0]
-        return db_uri
+        event.set_results({"result": "resource token set"})
 
     def set_status_and_log(self, msg, status) -> None:
         """

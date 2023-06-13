@@ -32,7 +32,7 @@ provides:
     interface: prometheus_scrape
 
 requires:
-  db:
+  database:
     interface: pgsql
     limit: 1 # Most charms only handle a single PostgreSQL Application.
   ingress:

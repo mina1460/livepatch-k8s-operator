@@ -30,7 +30,7 @@ async def app(ops_test: OpsTest):
         trust=True,
         application_name="postgresql",
     )
-    await ops_test.model.relate(APP_NAME, DB_NAME + ":db")
+    await ops_test.model.relate(APP_NAME, DB_NAME + ":database")
     async with ops_test.fast_forward():
         await ops_test.model.wait_for_idle(
             status=ActiveStatus.name,
