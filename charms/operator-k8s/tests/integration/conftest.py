@@ -26,7 +26,7 @@ async def app(ops_test: OpsTest):
     await ops_test.model.deploy(
         "postgresql-k8s",
         series="focal",
-        channel="edge",
+        channel="14/stable",
         trust=True,
         application_name="postgresql",
     )

@@ -33,7 +33,7 @@ provides:
 
 requires:
   database:
-    interface: pgsql
+    interface: postgresql_client
     limit: 1 # Most charms only handle a single PostgreSQL Application.
   ingress:
     interface: ingress

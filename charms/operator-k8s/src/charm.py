@@ -180,7 +180,7 @@ class LivepatchCharm(CharmBase):
                         "description": "Pebble config layer for livepatch",
                         "override": "merge",
                         "startup": "disabled",
-                        "command": "sh -c '/usr/local/bin/livepatch-server | tee {LOG_FILE}'",
+                        "command": "sh -c '/usr/local/bin/livepatch-server | tee /var/log/livepatch'",
                         "environment": env_vars,
                     },
                 },
@@ -248,7 +248,7 @@ class LivepatchCharm(CharmBase):
         # record the connection string
         self._state.dsn = uri
 
-        self._update_workload(event)
+        self._update_workload_container_config(event)
 
     # Actions
     def restart_action(self, event):
