@@ -6,6 +6,7 @@
 
 """Livepatch k8s charm.
 """
+import pgsql
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
 from charms.loki_k8s.v0.loki_push_api import LogProxyConsumer
@@ -24,6 +25,9 @@ SERVER_PORT = 8080
 DATABASE_NAME = "livepatch-server"
 LOG_FILE = "/var/log/livepatch"
 LOGROTATE_CONFIG_PATH = "/etc/logrotate.d/livepatch"
+
+DATABASE_RELATION = "database"
+DATABASE_RELATION_LEGACY = "database-legacy"
 
 
 class LivepatchCharm(CharmBase):
@@ -44,10 +48,19 @@ class LivepatchCharm(CharmBase):
 
         self.framework.observe(self.on.get_resource_token_action, self.get_resource_token_action)
 
+        # Legacy database support
+        self.legacy_db = pgsql.PostgreSQLClient(self, DATABASE_RELATION_LEGACY)
+        self.framework.observe(
+            self.legacy_db.on.database_relation_joined,
+            self._on_legacy_db_relation_joined,
+        )
+        self.framework.observe(self.legacy_db.on.master_changed, self._on_legacy_db_master_changed)
+        self.framework.observe(self.legacy_db.on.standby_changed, self._on_legacy_db_standby_changed)
+
         # Database
         self.database = DatabaseRequires(
             self,
-            relation_name="database",
+            relation_name=DATABASE_RELATION,
             database_name=DATABASE_NAME,
         )
         self.framework.observe(self.database.on.database_created, self._on_database_event)
@@ -223,7 +236,86 @@ class LivepatchCharm(CharmBase):
             LOGGER.error("cannot connect to workload container")
             return False
 
+    # Legacy database relation
+
+    def _on_legacy_db_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent) -> None:
+        """
+        Handles determining if the database (on legacy database relation) has finished setup, once setup is complete
+        a master/standby may join / change in consequent events.
+        """
+
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
+        LOGGER.info("(postgresql, legacy database relation) RELATION_JOINED event fired.")
+
+        LOGGER.warning(
+            f"`{DATABASE_RELATION_LEGACY}` is a legacy relation; try integrating with `{DATABASE_RELATION}` instead."
+        )
+
+        if self.model.unit.is_leader():
+            if self._is_database_relation_activated():
+                LOGGER.error(f"The `{DATABASE_RELATION}` relation is already integrated.")
+                raise RuntimeError(
+                    "Integration with both database relations is not allowed; "
+                    f"`{DATABASE_RELATION}` is already activated."
+                )
+            event.database = DATABASE_NAME
+        elif event.database != DATABASE_NAME:
+            event.defer()
+
+    def _on_legacy_db_master_changed(self, event: pgsql.MasterChangedEvent) -> None:
+        """
+        Handles master units of postgres joining / changing (for the legacy database relation).
+        The internal snap configuration is updated to reflect this.
+        """
+
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
+        LOGGER.info("(postgresql, legacy database relation) MASTER_CHANGED event fired.")
+
+        if event.database != DATABASE_NAME:
+            LOGGER.debug("(legacy database relation) Database setup not complete yet, returning.")
+            return
+
+        if self.model.unit.is_leader():
+            self.set_status_and_log(
+                "(legacy database relation) Updating application database connection...", WaitingStatus
+            )
+            if event.master is not None:
+                # Note (babakks): The split is mainly to drop query parameters that may cause further database
+                # connection errors. For example, there's this query parameters, named `fallback_application_name`,
+                # which causes the schema upgrade command to return `unrecognized configuration parameter
+                # "fallback_application_name" (SQLSTATE 42704)`.
+                db_uri = event.master.uri.split("?", 1)[0]
+                self._state.dsn = db_uri
+
+        self.on_config_changed(event)
+
+    def _on_legacy_db_standby_changed(self, event: pgsql.StandbyChangedEvent):
+        LOGGER.info("(postgresql, legacy database relation) STANDBY_CHANGED event fired.")
+        # NOTE NOTE NOTE
+        # This should be used for none-master on-prem instances when configuring
+        # additional livepatch instances, enabling us to read from standbys
+        if event.database != DATABASE_NAME:
+            # Leader has not yet set requirements. Wait until next event,
+            # or risk connecting to an incorrect database.
+            return
+        # If read only replicas are desired, these urls should be added to
+        # the peer relation e.g. peer = `[c.uri for c in event.standbys]`
+
     # Database
+
+    def _is_legacy_database_relation_activated(self) -> bool:
+        return len(self.model.relations[DATABASE_RELATION_LEGACY]) > 0
+
+    def _is_database_relation_activated(self) -> bool:
+        return len(self.model.relations[DATABASE_RELATION]) > 0
 
     def _on_database_event(self, event) -> None:
         """Database event handler."""
@@ -237,6 +329,13 @@ class LivepatchCharm(CharmBase):
             event.defer()
             LOGGER.warning("State is not ready")
             return
+
+        if self._is_legacy_database_relation_activated():
+            LOGGER.error(f"The `{DATABASE_RELATION_LEGACY}` relation is already integrated.")
+            raise RuntimeError(
+                "Integration with both database relations is not allowed; "
+                f"`{DATABASE_RELATION_LEGACY}` is already activated."
+            )
 
         # get the first endpoint from a comma separate list
         ep = event.endpoints.split(",", 1)[0]
@@ -260,7 +359,12 @@ class LivepatchCharm(CharmBase):
             container.restart()
 
     def schema_upgrade_action(self, event):
-        db_uri = self._get_db_uri()
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
+        db_uri = self._state.dsn
         container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
         if not db_uri:
             LOGGER.error("DB connection string not set")
@@ -313,7 +417,12 @@ class LivepatchCharm(CharmBase):
             return
 
     def schema_version_check_action(self, event) -> str:
-        db_uri = self._get_db_uri()
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
+        db_uri = self._state.dsn
         container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
         if not container.can_connect():
             LOGGER.error("cannot connect to the schema update container")
