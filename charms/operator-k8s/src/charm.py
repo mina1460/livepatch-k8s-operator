@@ -337,6 +337,14 @@ class LivepatchCharm(CharmBase):
                 f"`{DATABASE_RELATION_LEGACY}` is already activated."
             )
 
+        if event.username is None or event.password is None:
+            event.defer()
+            LOGGER.info(
+                "(postgresql) Relation data is not complete (missing `username` or `password` field); "
+                "deferring the event."
+            )
+            return
+
         # get the first endpoint from a comma separate list
         ep = event.endpoints.split(",", 1)[0]
         # compose the db connection string
