@@ -318,7 +318,10 @@ LIBAPI = 0
 # to 0 if you are raising the major API version
 LIBPATCH = 12
 
-PYDEPS = ["ops>=2.0.0"]
+# Uncomment the below after the following issues are addressed,
+# https://github.com/canonical/operator/issues/984
+# https://github.com/canonical/operator/issues/985
+# PYDEPS = ["ops>=2.0.0"]
 
 logger = logging.getLogger(__name__)
 
