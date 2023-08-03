@@ -6,7 +6,7 @@
 import pathlib
 import tempfile
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from ops.testing import Harness
 
@@ -88,35 +88,17 @@ class TestCharm(unittest.TestCase):
         environment = plan.to_dict()["services"]["livepatch"]["environment"]
         self.assertEqual(environment, environment | required_environment)
 
-    @patch("src.charm.LivepatchCharm._get_logrotate_config")
-    @patch("src.charm.LivepatchCharm.migration_is_required")
-    def test_logrotate_config_pushed(self, migration, get_logrotate_config: MagicMock):
-        migration.return_value = False
-        self.harness.set_leader(True)
-
+    def test_logrotate_config_pushed(self):
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, "canonical-livepatch-server-k8s/1")
 
-        self.harness.charm._state.dsn = "postgres://123"
-        self.harness.charm._state.resource_token = "test-token"
-
-        container = self.harness.model.unit.get_container("livepatch")
-        self.harness.charm.on.livepatch_pebble_ready.emit(container)
-
-        self.harness.update_config(
-            {
-                "auth.sso.enabled": True,
-                "patch-storage.type": "filesystem",
-                "patch-storage.filesystem-path": "/srv/",
-                "patch-cache.enabled": True,
-            }
-        )
+        # Trigger config-changed so that logrotate config gets written
         self.harness.charm.on.config_changed.emit()
 
-        # Emit the pebble-ready event for livepatch
-        self.harness.charm.on.livepatch_pebble_ready.emit(container)
-
-        get_logrotate_config.assert_called_once()
+        # Ensure that the content looks sensible
+        root = self.harness.get_filesystem_root("livepatch")
+        config = (root / "etc/logrotate.d/livepatch").read_text()
+        self.assertIn("/var/log/livepatch {", config)
 
     def test_database_relations_are_mutually_exclusive__legacy_first(self):
         rel_id = self.harness.add_relation("livepatch", "livepatch")
