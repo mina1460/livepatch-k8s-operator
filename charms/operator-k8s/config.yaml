@@ -50,6 +50,11 @@ options:
       (i.e. fetching patches from the hosted server), or will act as a
       hosted server.
     type: boolean
+  server.is-cloud-delay-enabled:
+    default: False
+    description: |
+      Whether to enable the delayed roll-out of patches based on a client's cloud.
+    type: boolean
 
   auth.basic.enabled:
     default: false
