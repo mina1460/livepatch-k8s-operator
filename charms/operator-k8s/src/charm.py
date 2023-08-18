@@ -201,7 +201,7 @@ class LivepatchCharm(CharmBase):
                     "livepatch-check": {
                         "override": "replace",
                         "period": "1m",
-                        "http": {"url": f"http://localhost:{SERVER_PORT}/debug/status"},
+                        "http": {"url": f"http://localhost:{SERVER_PORT}/debug/info"},
                     }
                 },
             }
