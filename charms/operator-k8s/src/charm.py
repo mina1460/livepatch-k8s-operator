@@ -15,7 +15,7 @@ from charms.prometheus_k8s.v0.prometheus_scrape import MetricsEndpointProvider
 from ops import pebble
 from ops.charm import CharmBase
 from ops.main import main
-from ops.model import ActiveStatus, BlockedStatus, WaitingStatus
+from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
 
 import utils
 from constants import LOGGER, SCHEMA_UPGRADE_CONTAINER, WORKLOAD_CONTAINER
@@ -25,6 +25,7 @@ SERVER_PORT = 8080
 DATABASE_NAME = "livepatch-server"
 LOG_FILE = "/var/log/livepatch"
 LOGROTATE_CONFIG_PATH = "/etc/logrotate.d/livepatch"
+LIVEPATCH_SERVICE_NAME = "livepatch"
 
 DATABASE_RELATION = "database"
 DATABASE_RELATION_LEGACY = "database-legacy"
@@ -125,8 +126,14 @@ class LivepatchCharm(CharmBase):
     def on_stop(self, _):
         container = self.unit.get_container(WORKLOAD_CONTAINER)
         if container.can_connect():
-            container.stop("livepatch")
-            self.unit.status = WaitingStatus("stopped")
+            try:
+                service = container.get_service(LIVEPATCH_SERVICE_NAME)
+            except ModelError:
+                LOGGER.warning("service not found, nothing to stop")
+                return
+            if service.is_running():
+                container.stop(LIVEPATCH_SERVICE_NAME)
+        self.unit.status = WaitingStatus("service stopped")
 
     def _update_workload_container_config(self, event):
         """
@@ -188,7 +195,7 @@ class LivepatchCharm(CharmBase):
         if workload_container.can_connect():
             update_config_environment_layer = {
                 "services": {
-                    "livepatch": {
+                    LIVEPATCH_SERVICE_NAME: {
                         "summary": "Livepatch Service",
                         "description": "Pebble config layer for livepatch",
                         "override": "merge",
@@ -205,13 +212,13 @@ class LivepatchCharm(CharmBase):
                     }
                 },
             }
-
-            workload_container.add_layer("livepatch", update_config_environment_layer, combine=True)
+            layer_label = "livepatch"
+            workload_container.add_layer(layer_label, update_config_environment_layer, combine=True)
             if self._ready(workload_container):
-                if workload_container.get_service("livepatch").is_running():
+                if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
                     workload_container.replan()
                 else:
-                    workload_container.start("livepatch")
+                    workload_container.start(LIVEPATCH_SERVICE_NAME)
             else:
                 self.unit.status = WaitingStatus("Service is not ready")
                 return
@@ -226,10 +233,10 @@ class LivepatchCharm(CharmBase):
     def _ready(self, workload_container):
         if workload_container.can_connect():
             plan = workload_container.get_plan()
-            if plan.services.get("livepatch") is None:
+            if plan.services.get(LIVEPATCH_SERVICE_NAME) is None:
                 LOGGER.info("livepatch service is not ready yet")
                 return False
-            if workload_container.get_service("livepatch").is_running():
+            if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
                 self.unit.status = ActiveStatus()
             return True
         else:
@@ -363,7 +370,7 @@ class LivepatchCharm(CharmBase):
         Restarts the workload container
         """
         container = self.unit.get_container(WORKLOAD_CONTAINER)
-        if container.can_connect() and container.get_service("livepatch").is_running():
+        if container.can_connect() and container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
             container.restart()
 
     def schema_upgrade_action(self, event):
