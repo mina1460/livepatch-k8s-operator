@@ -165,3 +165,78 @@ class TestCharm(unittest.TestCase):
             str(cm.exception),
             "Integration with both database relations is not allowed; `database` is already activated.",
         )
+
+    def test_postgres_patch_storage_config_sets_in_container(self):
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
+        self.harness.set_leader(True)
+
+        self.harness.charm._state.dsn = "postgres://123"
+        self.harness.charm._state.resource_token = "test-token"
+
+        container = self.harness.model.unit.get_container("livepatch")
+        with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
+            migration.return_value = False
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+            self.harness.update_config(
+                {
+                    "patch-storage.type": "postgres",
+                    "patch-storage.postgres-connection-string": "postgres://user:password@host/db",
+                }
+            )
+            self.harness.charm.on.config_changed.emit()
+
+            # Emit the pebble-ready event for livepatch
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        # Check the that the plan was updated
+        plan = self.harness.get_container_pebble_plan("livepatch")
+        required_environment = {
+            "LP_PATCH_STORAGE_TYPE": "postgres",
+            "LP_PATCH_STORAGE_POSTGRES_CONNECTION_STRING": "postgres://user:password@host/db",
+        }
+        environment = plan.to_dict()["services"]["livepatch"]["environment"]
+        self.assertEqual(environment, environment | required_environment)
+
+    def test_postgres_patch_storage_config_defaults_to_database_relation(self):
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
+        self.harness.set_leader(True)
+        self.harness.enable_hooks()
+
+        db_rel_id = self.harness.add_relation("database", "postgres-new")
+        self.harness.add_relation_unit(db_rel_id, "postgres-new/0")
+        self.harness.update_relation_data(
+            db_rel_id,
+            "postgres-new",
+            {
+                "username": "username",
+                "password": "password",
+                "endpoints": "host",
+            },
+        )
+
+        container = self.harness.model.unit.get_container("livepatch")
+        with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
+            migration.return_value = False
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+            self.harness.update_config(
+                {
+                    "patch-storage.type": "postgres",
+                }
+            )
+            self.harness.charm.on.config_changed.emit()
+
+            # Emit the pebble-ready event for livepatch
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        # Check the that the plan was updated
+        plan = self.harness.get_container_pebble_plan("livepatch")
+        required_environment = {
+            "LP_PATCH_STORAGE_TYPE": "postgres",
+            "LP_PATCH_STORAGE_POSTGRES_CONNECTION_STRING": "postgresql://username:password@host/livepatch-server",
+        }
+        environment = plan.to_dict()["services"]["livepatch"]["environment"]
+        self.assertEqual(environment, environment | required_environment)

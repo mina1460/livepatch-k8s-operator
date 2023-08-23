@@ -190,6 +190,10 @@ class LivepatchCharm(CharmBase):
             # TODO: Find a better way to identify a on-prem syncing instance.
             env_vars["LP_PATCH_SYNC_ID"] = self.model.uuid
 
+        if self.config.get("patch-storage.type") == "postgres":
+            postgres_patch_storage_dsn = self.config.get("patch-storage.postgres-connection-string", "") or dsn
+            env_vars["LP_PATCH_STORAGE_POSTGRES_CONNECTION_STRING"] = postgres_patch_storage_dsn
+
         # remove empty environment values
         env_vars = {key: value for key, value in env_vars.items() if value}
         if workload_container.can_connect():
@@ -505,7 +509,7 @@ class LivepatchCharm(CharmBase):
 
         contract_token = event.params.get("contract-token", "")
         proxies = utils.get_proxy_dict(self.config)
-        contracts_url = self.config.get("contracts-url", "")
+        contracts_url = self.config.get("contracts.url", "")
         machine_token = utils.get_machine_token(contract_token, contracts_url=contracts_url, proxies=proxies)
 
         if not machine_token:
