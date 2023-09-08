@@ -167,6 +167,7 @@ class LivepatchCharm(CharmBase):
             upgrade_required = self.migration_is_required(schema_container, dsn)
         except Exception as e:
             LOGGER.error("Failed to determe if schema upgrade required.")
+            self.unit.status = WaitingStatus("Unable to determine database readiness")
             LOGGER.error(e)
             return
         if upgrade_required:
@@ -174,7 +175,7 @@ class LivepatchCharm(CharmBase):
                 self.schema_upgrade(schema_container, dsn)
             else:
                 LOGGER.error("waiting for schema upgrade")
-                self.unit.status = WaitingStatus("waiting for schema upgrade")
+                self.unit.status = WaitingStatus("Waiting for schema upgrade")
                 event.defer()
                 return
 
@@ -396,16 +397,18 @@ class LivepatchCharm(CharmBase):
     def schema_upgrade(self, container, conn_str):
         """
         Performs a schema upgrade on the configurable database
+        Raises an exception if there is a failure to prevent further charm
+        hooks from firing and prevent more non-leader units from upgrading.
         """
         if not self.unit.is_leader():
             LOGGER.warning("Attempted to run schema upgrade on non-leader unit. Skipping.")
             return
 
+        LOGGER.info("Attempting schema upgrade")
         self.unit.status = WaitingStatus("pg connection successful, attempting upgrade")
         if not container.exists("/usr/local/bin/livepatch-schema-tool"):
             LOGGER.error("livepatch-schema-tool not found in the schema upgrade container")
-            self.unit.status = BlockedStatus("Cannot find schema upgrade tool")
-            return
+            raise FileNotFoundError("schema tool not found")
 
         process = None
         try:
@@ -420,8 +423,8 @@ class LivepatchCharm(CharmBase):
             )
         except pebble.APIError as e:
             LOGGER.error(e)
-            self.unit.status = BlockedStatus("Schema migration failed")
-            return
+            LOGGER.error("Schema migration failed")
+            raise (e)
 
         try:
             stdout, _ = process.wait_output()
@@ -432,8 +435,8 @@ class LivepatchCharm(CharmBase):
             LOGGER.error("Exited with code %d. Stderr:", e.exit_code)
             for line in e.stderr.splitlines():
                 LOGGER.error("    %s", line)
-            self.unit.status = BlockedStatus("Schema migration failed - executing migration failed")
-            return
+            LOGGER.error("Schema migration failed - executing migration failed")
+            raise (e)
 
     def schema_version_check_action(self, event) -> str:
         if not self._state.is_ready():
@@ -449,14 +452,11 @@ class LivepatchCharm(CharmBase):
         self.migration_is_required(container, db_uri)
 
     def migration_is_required(self, container, conn_str: str) -> bool:
-        if not self.unit.is_leader():
-            LOGGER.warning("Schema check skipped, can only run on leader.")
-            return None
-
         """Runs a schema version check against the database"""
+
         if not container.exists("/usr/local/bin/livepatch-schema-tool"):
             LOGGER.error("livepatch-schema-tool not found in the schema upgrade container")
-            raise ValueError("Failed to find schema tool")
+            raise FileNotFoundError("Failed to find schema tool")
 
         if not conn_str:
             LOGGER.error("Database connection string not found")
