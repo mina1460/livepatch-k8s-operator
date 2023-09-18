@@ -96,9 +96,7 @@ class LivepatchCharm(CharmBase):
         )
 
         # Grafana dashboard relation
-        self._grafana_dashboards = GrafanaDashboardProvider(
-            self, relation_name="grafana-dashboard", dashboards_path="./grafana_dashboards"
-        )
+        self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
     # Runs first
     def on_config_changed(self, event):
@@ -171,13 +169,7 @@ class LivepatchCharm(CharmBase):
             LOGGER.error(e)
             return
         if upgrade_required:
-            if self.unit.is_leader():
-                self.schema_upgrade(schema_container, dsn)
-            else:
-                LOGGER.error("waiting for schema upgrade")
-                self.unit.status = WaitingStatus("Waiting for schema upgrade")
-                event.defer()
-                return
+            self.schema_upgrade(schema_container, dsn)
 
         workload_container = self.unit.get_container(WORKLOAD_CONTAINER)
 
@@ -221,8 +213,10 @@ class LivepatchCharm(CharmBase):
             workload_container.add_layer(layer_label, update_config_environment_layer, combine=True)
             if self._ready(workload_container):
                 if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
+                    LOGGER.info("Replanning services")
                     workload_container.replan()
                 else:
+                    LOGGER.info("Starting Livepatch services")
                     workload_container.start(LIVEPATCH_SERVICE_NAME)
             else:
                 self.unit.status = WaitingStatus("Service is not ready")
@@ -375,8 +369,13 @@ class LivepatchCharm(CharmBase):
         Restarts the workload container
         """
         container = self.unit.get_container(WORKLOAD_CONTAINER)
-        if container.can_connect() and container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
-            container.restart()
+
+        if container.can_connect():
+            service = container.get_service(LIVEPATCH_SERVICE_NAME)
+            if service and service.is_running():
+                container.stop(LIVEPATCH_SERVICE_NAME)
+
+        self._update_workload_container_config(event)
 
     def schema_upgrade_action(self, event):
         if not self._state.is_ready():
@@ -400,10 +399,6 @@ class LivepatchCharm(CharmBase):
         Raises an exception if there is a failure to prevent further charm
         hooks from firing and prevent more non-leader units from upgrading.
         """
-        if not self.unit.is_leader():
-            LOGGER.warning("Attempted to run schema upgrade on non-leader unit. Skipping.")
-            return
-
         LOGGER.info("Attempting schema upgrade")
         self.unit.status = WaitingStatus("pg connection successful, attempting upgrade")
         if not container.exists("/usr/local/bin/livepatch-schema-tool"):
