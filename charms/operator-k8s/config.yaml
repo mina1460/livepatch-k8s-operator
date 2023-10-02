@@ -50,12 +50,7 @@ options:
       (i.e. fetching patches from the hosted server), or will act as a
       hosted server.
     type: boolean
-  server.is-cloud-delay-enabled:
-    default: False
-    description: |
-      Whether to enable the delayed roll-out of patches based on a client's cloud.
-    type: boolean
-    
+
   auth.basic.enabled:
     default: false
     description: |
@@ -348,6 +343,15 @@ options:
   influx.organization:
     description: "Organization name"
     type: string
+
+  cloud_delay.enabled:
+    description: "Whether to enable the delayed roll-out of patches based on a client's cloud."
+    type: boolean
+    default: false
+  cloud_delay.default_delay_hours:
+    description: "Default delay hours for clouds/regions/azs without predefined delay hours."
+    type: int
+    default: 0
 
   profiler.enabled: 
     description: >
