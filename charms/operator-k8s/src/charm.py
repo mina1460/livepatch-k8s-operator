@@ -167,6 +167,7 @@ class LivepatchCharm(CharmBase):
             LOGGER.error("Failed to determe if schema upgrade required.")
             self.unit.status = WaitingStatus("Unable to determine database readiness")
             LOGGER.error(e)
+            event.defer()
             return
         if upgrade_required:
             self.schema_upgrade(schema_container, dsn)
@@ -371,7 +372,11 @@ class LivepatchCharm(CharmBase):
         container = self.unit.get_container(WORKLOAD_CONTAINER)
 
         if container.can_connect():
-            service = container.get_service(LIVEPATCH_SERVICE_NAME)
+            service = None
+            try:
+                service = container.get_service(LIVEPATCH_SERVICE_NAME)
+            except ModelError:
+                pass
             if service and service.is_running():
                 container.stop(LIVEPATCH_SERVICE_NAME)
 
