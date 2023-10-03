@@ -236,10 +236,6 @@ options:
     default: false
     description: Enable sending reports from local machines during patch synchronisation.
     type: boolean
-  patch-sync.token:
-    default: ""
-    description: Patch snapshot synchronisation token.
-    type: string
   patch-sync.upstream-url:
     default: https://livepatch.canonical.com
     description: Livepatch server to download patch snapshots from.

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from ops.model import BlockedStatus
 from ops.testing import Harness
 
 from src.charm import LivepatchCharm
@@ -69,6 +70,7 @@ class TestCharm(unittest.TestCase):
                     "patch-storage.type": "filesystem",
                     "patch-storage.filesystem-path": "/srv/",
                     "patch-cache.enabled": True,
+                    "server.url-template": "http://localhost/{filename}",
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -87,6 +89,75 @@ class TestCharm(unittest.TestCase):
         }
         environment = plan.to_dict()["services"]["livepatch"]["environment"]
         self.assertEqual(environment, environment | required_environment)
+
+    def test_missing_url_template_config_causes_blocked_state(self):
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
+        self.harness.set_leader(True)
+
+        self.harness.charm._state.dsn = "postgres://123"
+        self.harness.charm._state.resource_token = "test-token"
+
+        container = self.harness.model.unit.get_container("livepatch")
+        with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
+            migration.return_value = False
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+            self.harness.update_config(
+                {
+                    "auth.sso.enabled": True,
+                    "patch-storage.type": "filesystem",
+                    "patch-storage.filesystem-path": "/srv/",
+                    "patch-cache.enabled": True,
+                }
+            )
+            self.harness.charm.on.config_changed.emit()
+
+            # Emit the pebble-ready event for livepatch
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        # Check the that the plan was updated
+        plan = self.harness.get_container_pebble_plan("livepatch")
+        self.assertEqual(plan.to_dict(), {})
+        self.assertEqual(self.harness.charm.unit.status.name, BlockedStatus.name)
+        self.assertEqual(self.harness.charm.unit.status.message, "✘ server.url-template config not set")
+
+    def test_missing_sync_token_causes_blocked_state(self):
+        """For on-prem servers, a missing sync token should cause a blocked state."""
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
+        self.harness.set_leader(True)
+
+        self.harness.charm._state.dsn = "postgres://123"
+        # self.harness.charm._state.resource_token = ""
+
+        container = self.harness.model.unit.get_container("livepatch")
+        with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
+            migration.return_value = False
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+            self.harness.update_config(
+                {
+                    "auth.sso.enabled": True,
+                    "patch-storage.type": "filesystem",
+                    "patch-storage.filesystem-path": "/srv/",
+                    "patch-cache.enabled": True,
+                    "server.url-template": "http://localhost/{filename}",
+                    "server.is-hosted": True,
+                }
+            )
+            self.harness.charm.on.config_changed.emit()
+
+            # Emit the pebble-ready event for livepatch
+            self.harness.charm.on.livepatch_pebble_ready.emit(container)
+
+        # Check the that the plan was updated
+        plan = self.harness.get_container_pebble_plan("livepatch")
+        self.assertEqual(plan.to_dict(), {})
+        self.assertEqual(self.harness.charm.unit.status.name, BlockedStatus.name)
+        self.assertEqual(
+            self.harness.charm.unit.status.message, "✘ patch-sync token not set, run get-resource-token action"
+        )
 
     def test_logrotate_config_pushed(self):
         rel_id = self.harness.add_relation("livepatch", "livepatch")
@@ -183,6 +254,7 @@ class TestCharm(unittest.TestCase):
                 {
                     "patch-storage.type": "postgres",
                     "patch-storage.postgres-connection-string": "postgres://user:password@host/db",
+                    "server.url-template": "http://localhost/{filename}",
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -223,9 +295,7 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.on.livepatch_pebble_ready.emit(container)
 
             self.harness.update_config(
-                {
-                    "patch-storage.type": "postgres",
-                }
+                {"patch-storage.type": "postgres", "server.url-template": "http://localhost/{filename}"}
             )
             self.harness.charm.on.config_changed.emit()
 

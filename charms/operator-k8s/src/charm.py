@@ -30,6 +30,11 @@ LIVEPATCH_SERVICE_NAME = "livepatch"
 DATABASE_RELATION = "database"
 DATABASE_RELATION_LEGACY = "database-legacy"
 
+REQUIRED_SETTINGS = {
+    "server.url-template": "✘ server.url-template config not set",
+}
+ON_PREM_REQUIRED_SETTINGS = {}
+
 
 class LivepatchCharm(CharmBase):
     def __init__(self, *args):
@@ -172,12 +177,29 @@ class LivepatchCharm(CharmBase):
         if upgrade_required:
             self.schema_upgrade(schema_container, dsn)
 
-        workload_container = self.unit.get_container(WORKLOAD_CONTAINER)
+        # This token comes from an action rather than config so we check for it specifically.
+        if self.config.get("server.is-hosted"):
+            if self._state.resource_token is None or self._state.resource_token:
+                error_msg = "✘ patch-sync token not set, run get-resource-token action"
+                self.unit.status = BlockedStatus(error_msg)
+                LOGGER.warning(error_msg)
+                return
+
+        # Then check for required config values.
+        required_settings = REQUIRED_SETTINGS.copy()
+        if self.config.get("server.is-hosted"):
+            required_settings.update(ON_PREM_REQUIRED_SETTINGS)
+
+        for setting, error_msg in required_settings.items():
+            if self.config.get(setting) is None or self.config.get(setting) == "":
+                self.unit.status = BlockedStatus(error_msg)
+                LOGGER.warning(error_msg)
+                return
 
         env_vars = utils.map_config_to_env_vars(self)
 
-        # Some extra config
-        env_vars["PATCH_SYNC_TOKEN"] = self._state.resource_token
+        # Some extra config and checks
+        env_vars["LP_PATCH_SYNC_TOKEN"] = self._state.resource_token
         env_vars["LP_DATABASE_CONNECTION_STRING"] = dsn
         env_vars["LP_SERVER_SERVER_ADDRESS"] = f":{SERVER_PORT}"
         if self.config.get("patch-sync.enabled") is True:
@@ -190,6 +212,8 @@ class LivepatchCharm(CharmBase):
 
         # remove empty environment values
         env_vars = {key: value for key, value in env_vars.items() if value}
+
+        workload_container = self.unit.get_container(WORKLOAD_CONTAINER)
         if workload_container.can_connect():
             update_config_environment_layer = {
                 "services": {
@@ -508,6 +532,9 @@ class LivepatchCharm(CharmBase):
             return
 
         contract_token = event.params.get("contract-token", "")
+        if contract_token == "":
+            event.set_results({"error": "cannot fetch the resource token: no contract token provided"})
+            return
         proxies = utils.get_proxy_dict(self.config)
         contracts_url = self.config.get("contracts.url", "")
         machine_token = utils.get_machine_token(contract_token, contracts_url=contracts_url, proxies=proxies)
