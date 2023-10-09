@@ -213,7 +213,7 @@ options:
     type: boolean
   patch-sync.flavors:
     default: "generic,lowlatency,aws"
-    description: > 
+    description: >
       A comma separated list of kernel flavors to download patches for.
       If this field is empty, the patch sync will gather all flavors.
     type: string
@@ -240,6 +240,13 @@ options:
     default: https://livepatch.canonical.com
     description: Livepatch server to download patch snapshots from.
     type: string
+  patch-sync.minimum-kernel-version:
+    description: >-
+      A minimum kernel version of format "0.0.0" denoting the lowest 
+      kernel version to download patches for. When no value is present,
+      all are synced. For example, "5.4.0" will sync "5.4.0" and up.
+    type: string
+    default: ""
   patch-sync.proxy.enabled:
     default: false
     description: Whether or not to proxy patch syncs.
@@ -349,7 +356,7 @@ options:
     type: int
     default: 0
 
-  profiler.enabled: 
+  profiler.enabled:
     description: >
       Whether to enable or disable continuous profiling on the server or not.
     type: boolean
@@ -357,7 +364,7 @@ options:
   profiler.server_address:
     description: The pyroscope server address to send the metrics to.
     type: string
-  profiler.hostname: 
+  profiler.hostname:
     description: the hostname of the server the profiler is running on. This is used as a tag to group metrics by the server it is running on.
     type: string
   profiler.sample_rate:
@@ -390,7 +397,7 @@ options:
     type: boolean
     default: false
   profiler.profile_mutexes:
-    description:  this turns on profiling for mutexes
+    description: this turns on profiling for mutexes
     default: false
     type: boolean
   profiler.profile_blocks:
