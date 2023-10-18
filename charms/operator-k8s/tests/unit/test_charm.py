@@ -71,6 +71,7 @@ class TestCharm(unittest.TestCase):
                     "patch-storage.filesystem-path": "/srv/",
                     "patch-cache.enabled": True,
                     "server.url-template": "http://localhost/{filename}",
+                    "server.is-hosted": True,
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -109,6 +110,7 @@ class TestCharm(unittest.TestCase):
                     "patch-storage.type": "filesystem",
                     "patch-storage.filesystem-path": "/srv/",
                     "patch-cache.enabled": True,
+                    "server.is-hosted": True,
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -143,7 +145,7 @@ class TestCharm(unittest.TestCase):
                     "patch-storage.filesystem-path": "/srv/",
                     "patch-cache.enabled": True,
                     "server.url-template": "http://localhost/{filename}",
-                    "server.is-hosted": True,
+                    "server.is-hosted": False,
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -255,6 +257,7 @@ class TestCharm(unittest.TestCase):
                     "patch-storage.type": "postgres",
                     "patch-storage.postgres-connection-string": "postgres://user:password@host/db",
                     "server.url-template": "http://localhost/{filename}",
+                    "server.is-hosted": True,
                 }
             )
             self.harness.charm.on.config_changed.emit()
@@ -295,7 +298,11 @@ class TestCharm(unittest.TestCase):
             self.harness.charm.on.livepatch_pebble_ready.emit(container)
 
             self.harness.update_config(
-                {"patch-storage.type": "postgres", "server.url-template": "http://localhost/{filename}"}
+                {
+                    "patch-storage.type": "postgres",
+                    "server.url-template": "http://localhost/{filename}",
+                    "server.is-hosted": True,
+                }
             )
             self.harness.charm.on.config_changed.emit()
 

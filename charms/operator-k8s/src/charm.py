@@ -178,7 +178,7 @@ class LivepatchCharm(CharmBase):
             self.schema_upgrade(schema_container, dsn)
 
         # This token comes from an action rather than config so we check for it specifically.
-        if self.config.get("server.is-hosted"):
+        if not self.config.get("server.is-hosted"):
             if self._state.resource_token is None or self._state.resource_token:
                 error_msg = "✘ patch-sync token not set, run get-resource-token action"
                 self.unit.status = BlockedStatus(error_msg)
