@@ -45,6 +45,7 @@ class LivepatchCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.on_config_changed)
         self.framework.observe(self.on.update_status, self.on_update_status)
         self.framework.observe(self.on.leader_elected, self.on_leader_elected)
+        self.framework.observe(self.on.livepatch_pebble_ready, self.on_pebble_ready)
         self.framework.observe(self.on.start, self.on_start)
         self.framework.observe(self.on.stop, self.on_stop)
 
@@ -113,8 +114,8 @@ class LivepatchCharm(CharmBase):
 
     # Runs third and on any container restarts & does not guarantee the container is "still up"
     # Runs additionally when; a new unit is created, and upgrade-charm has been run
-    # def on_pebble_ready(self, event):
-    #    self._update_workload_container_config(event)
+    def on_pebble_ready(self, event):
+        self._update_workload_container_config(event)
 
     def on_update_status(self, event):
         workload = self.unit.get_container(WORKLOAD_CONTAINER)
