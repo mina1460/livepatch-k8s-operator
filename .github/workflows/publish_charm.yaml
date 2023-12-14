@@ -8,4 +8,4 @@ jobs:
     uses: canonical/operator-workflows/.github/workflows/publish_charm.yaml@main
     secrets: inherit
     with:
-      channel: ops1.x/edge
+      channel: latest/edge

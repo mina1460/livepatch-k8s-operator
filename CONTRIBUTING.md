@@ -4,8 +4,6 @@
 
 This documents explains the processes and practices recommended for contributing enhancements to this operator.
 
-- As this is a private repository containing the charm, consult the JAAS/Livepatch team
-  with any issues and/or improvements.
 - Familiarising yourself with the [Charmed Operator Framework](https://juju.is/docs/sdk) library will help you a lot when working on new features or bug fixes.
 - All enhancements require review before being merged. Code review typically examines
   - code quality

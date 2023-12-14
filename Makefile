@@ -1,3 +1,6 @@
+# Copyright 2023 Canonical Ltd.
+# See LICENSE file for licensing details.
+
 .PHONY: microk8s-push operator-prod-k8s deploy-onprem-k8s
 
 # Re-tag and push to microk8s for testing locally

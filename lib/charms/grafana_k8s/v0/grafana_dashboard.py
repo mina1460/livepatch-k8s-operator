@@ -1,3 +1,6 @@
+# Copyright 2023 Canonical Ltd.
+# Licensed under the Apache2.0. See LICENSE file in charm source for details.
+
 # Copyright 2021 Canonical Ltd.
 # See LICENSE file for licensing details.
 

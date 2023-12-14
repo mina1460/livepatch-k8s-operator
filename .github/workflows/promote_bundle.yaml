@@ -7,16 +7,16 @@ on:
             type: choice
             description: 'Origin Channel'
             options:
-            - machine/edge
-            - machine/beta
-            - machine/candidate
+            - latest/edge
+            - latest/beta
+            - latest/candidate
         destination-channel:
             type: choice
             description: 'Destination Channel'
             options:
-            - machine/beta
-            - machine/candidate
-            - machine/stable
+            - latest/beta
+            - latest/candidate
+            - latest/stable
 
 jobs:
   promote:
