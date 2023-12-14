@@ -1,8 +1,6 @@
 # Copyright 2023 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
-# Copyright 2022 Canonical Ltd.
-# See LICENSE file for licensing details.
 """## Overview.
 
 This document explains how to use the `JujuTopology` class to

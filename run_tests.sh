@@ -2,9 +2,6 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Copyright 2022 Canonical Ltd
-# See LICENSE file for licensing details.
-
 if [ -z "$VIRTUAL_ENV" -a -d venv/ ]; then
     . venv/bin/activate
 fi

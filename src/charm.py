@@ -2,9 +2,6 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-# Copyright 2022 Canonical Ltd
-# See LICENSE file for licensing details.
-#
 # Learn more at: https://juju.is/docs/sdk
 
 """Livepatch k8s charm.
