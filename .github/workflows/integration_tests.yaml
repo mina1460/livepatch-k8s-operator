@@ -1,25 +1,23 @@
-name: Run integration tests
+name: Integration tests
 
 on:
   pull_request:
+  workflow_call:
 
 jobs:
-  integration_tests:
-    name: integration tests
+  integration-test-microk8s:
+    name: Integration tests (microk8s)
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 
-      uses: actions/setup-python@v4
-    - run: sudo snap install charmcraft --channel=2.x/stable --classic
-    - run: sudo snap install juju --channel=3.3/stable
-    - uses: charmed-kubernetes/actions-operator@main 
-      with: 
-        juju-channel: 3.3/stable 
-        provider: lxd
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        python -m pip install tox
-    - name: Run the integration tests
-      run: tox -e integration
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@main
+        with:
+          juju-channel: 3.3/stable
+          provider: microk8s
+          microk8s-addons: "ingress storage dns rbac registry"
+          channel: 1.25-strict/stable
+      - name: Run integration tests
+        # set a predictable model name so it can be consumed by charm-logdump-action
+        run: tox -e integration
