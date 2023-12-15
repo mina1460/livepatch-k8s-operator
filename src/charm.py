@@ -4,8 +4,7 @@
 
 # Learn more at: https://juju.is/docs/sdk
 
-"""Livepatch k8s charm.
-"""
+"""Livepatch k8s charm."""
 import pgsql
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -37,7 +36,10 @@ ON_PREM_REQUIRED_SETTINGS = {}
 
 
 class LivepatchCharm(CharmBase):
+    """The livepatch k8s charm."""
+
     def __init__(self, *args):
+        """Init function."""
         super().__init__(*args)
 
         self._state = State(self.app, lambda: self.model.get_relation("livepatch"))
@@ -104,20 +106,22 @@ class LivepatchCharm(CharmBase):
         # Grafana dashboard relation
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
-    # Runs first
     def on_config_changed(self, event):
+        """On config changed hook, which runs first."""
         self._update_workload_container_config(event)
 
-    # Runs second
     def on_start(self, event):
+        """On start hook, which runs after the on-config-changed hook."""
         self._update_workload_container_config(event)
 
     # Runs third and on any container restarts & does not guarantee the container is "still up"
     # Runs additionally when; a new unit is created, and upgrade-charm has been run
     def on_pebble_ready(self, event):
+        """On pebble ready hook, which runs after the on-start hook."""
         self._update_workload_container_config(event)
 
     def on_update_status(self, event):
+        """On update status."""
         workload = self.unit.get_container(WORKLOAD_CONTAINER)
         self._ready(workload)
 
@@ -125,9 +129,11 @@ class LivepatchCharm(CharmBase):
     # When a leader loses leadership it only sees the leader-settings-changed
     # As such you will only receive this even if YOU ARE the CURRENT leader (so no need to check)
     def on_leader_elected(self, event):
+        """Run after the leader is elected."""
         self._update_workload_container_config(event)
 
     def on_stop(self, _):
+        """On stop hook."""
         container = self.unit.get_container(WORKLOAD_CONTAINER)
         if container.can_connect():
             try:
@@ -140,11 +146,7 @@ class LivepatchCharm(CharmBase):
         self.unit.status = WaitingStatus("service stopped")
 
     def _update_workload_container_config(self, event):
-        """
-        Update workload with all available configuration
-        data.
-        """
-
+        """Update workload with all available configuration data."""
         if not self._state.is_ready():
             event.defer()
             LOGGER.warning("State is not ready")
@@ -156,7 +158,7 @@ class LivepatchCharm(CharmBase):
         dsn = self._state.dsn
         if not dsn:
             LOGGER.info("waiting for PG connection string")
-            self.unit.status = BlockedStatus("waiting for pg relation.")
+            self.unit.status = BlockedStatus("Waiting for postgres relation to be established.")
             event.defer()
             return
         schema_container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
@@ -272,10 +274,10 @@ class LivepatchCharm(CharmBase):
 
     def _on_legacy_db_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent) -> None:
         """
-        Handles determining if the database (on legacy database relation) has finished setup, once setup is complete
-        a master/standby may join / change in consequent events.
-        """
+        Handle determining if the database (on legacy database relation) has finished setup.
 
+        once setup is complete a master/standby may join / change in consequent events.
+        """
         if not self._state.is_ready():
             event.defer()
             LOGGER.warning("State is not ready")
@@ -300,10 +302,10 @@ class LivepatchCharm(CharmBase):
 
     def _on_legacy_db_master_changed(self, event: pgsql.MasterChangedEvent) -> None:
         """
-        Handles master units of postgres joining / changing (for the legacy database relation).
+        Handle master units of postgres joining / changing (for the legacy database relation).
+
         The internal snap configuration is updated to reflect this.
         """
-
         if not self._state.is_ready():
             event.defer()
             LOGGER.warning("State is not ready")
@@ -351,7 +353,6 @@ class LivepatchCharm(CharmBase):
 
     def _on_database_event(self, event) -> None:
         """Database event handler."""
-
         if not self.model.unit.is_leader():
             return
 
@@ -391,9 +392,7 @@ class LivepatchCharm(CharmBase):
 
     # Actions
     def restart_action(self, event):
-        """
-        Restarts the workload container
-        """
+        """Restart the workload container."""
         container = self.unit.get_container(WORKLOAD_CONTAINER)
 
         if container.can_connect():
@@ -408,6 +407,7 @@ class LivepatchCharm(CharmBase):
         self._update_workload_container_config(event)
 
     def schema_upgrade_action(self, event):
+        """Run the schema upgrade action."""
         if not self._state.is_ready():
             event.defer()
             LOGGER.warning("State is not ready")
@@ -425,9 +425,10 @@ class LivepatchCharm(CharmBase):
 
     def schema_upgrade(self, container, conn_str):
         """
-        Performs a schema upgrade on the configurable database
-        Raises an exception if there is a failure to prevent further charm
-        hooks from firing and prevent more non-leader units from upgrading.
+        Perform a schema upgrade on the configurable database.
+
+        Raise an exception if there is a failure to prevent further charm.
+        hook from firing and prevent more non-leader units from upgrading.
         """
         LOGGER.info("Attempting schema upgrade")
         self.unit.status = WaitingStatus("pg connection successful, attempting upgrade")
@@ -464,6 +465,7 @@ class LivepatchCharm(CharmBase):
             raise (e)
 
     def schema_version_check_action(self, event) -> str:
+        """Check schema version action."""
         if not self._state.is_ready():
             event.defer()
             LOGGER.warning("State is not ready")
@@ -477,8 +479,7 @@ class LivepatchCharm(CharmBase):
         self.migration_is_required(container, db_uri)
 
     def migration_is_required(self, container, conn_str: str) -> bool:
-        """Runs a schema version check against the database"""
-
+        """Run a schema version check against the database."""
         if not container.exists("/usr/local/bin/livepatch-schema-tool"):
             LOGGER.error("livepatch-schema-tool not found in the schema upgrade container")
             raise FileNotFoundError("Failed to find schema tool")
@@ -519,9 +520,7 @@ class LivepatchCharm(CharmBase):
                 raise e
 
     def get_resource_token_action(self, event):
-        """
-        Retrieves the livepatch resource token from ua-contracts.
-        """
+        """Retrieve the livepatch resource token from ua-contracts."""
         if not self.unit.is_leader():
             LOGGER.error("cannot fetch the resource token: unit is not the leader")
             event.set_results({"error": "cannot fetch the resource token: unit is not the leader"})
@@ -552,9 +551,7 @@ class LivepatchCharm(CharmBase):
         event.set_results({"result": "resource token set"})
 
     def set_status_and_log(self, msg, status) -> None:
-        """
-        A simple wrapper to log and set unit status simultaneously.
-        """
+        """Log and set unit status."""
         LOGGER.info(msg)
         self.unit.status = status(msg)
 
@@ -571,15 +568,13 @@ class LivepatchCharm(CharmBase):
 """
 
     def _push_to_workload(self, filename, content, event):
-        """Create file on the workload container with
-        the specified content."""
-
+        """Create file on the workload container with the specified content."""
         container = self.unit.get_container(WORKLOAD_CONTAINER)
         if container.can_connect():
             LOGGER.info("pushing file {} to the workload container".format(filename))
             container.push(filename, content, make_dirs=True)
         else:
-            LOGGER.info("workload container not ready - defering")
+            LOGGER.info("workload container not ready - deferring")
             event.defer()
             return
 

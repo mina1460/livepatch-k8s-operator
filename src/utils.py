@@ -1,6 +1,8 @@
 # Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+"""Utils module."""
+
 import csv
 import json
 import os
@@ -14,9 +16,9 @@ RESOURCE_NAME = "livepatch-onprem"
 
 def map_config_to_env_vars(charm, **additional_env):
     """
-    Maps the config values provided in config.yaml into environment variables
-    such that they can be passed directly to the pebble layer.
+    Map the config values provided in config.yaml into environment variables.
 
+    After that, the vars can be passed directly to the pebble layer.
     Variables must match the form LP_<Key1>_<key2>_<key3>...
     """
     env_mapped_config = {"LP_" + k.replace("-", "_").replace(".", "_").upper(): v for k, v in charm.config.items()}
@@ -39,10 +41,7 @@ def get_proxy_dict(cfg):
 
 
 def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, proxies=None) -> str:
-    """
-    Retrieve a resource token for the livepatch-onprem
-    resource.
-    """
+    """Retrieve a resource token for the livepatch-onprem resource."""
     if proxies is not None:
         os.environ["http_proxy"] = proxies.get("http_proxy", "")
         os.environ["https_proxy"] = proxies.get("https_proxy", "")
@@ -76,10 +75,7 @@ def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, 
 
 
 def get_resource_token(machine_token, contracts_url=DEFAULT_CONTRACTS_URL, proxies=None):
-    """
-    Retrieve a resource token for the livepatch-onprem
-    resource.
-    """
+    """Retrieve a resource token for the livepatch-onprem resource."""
     if proxies is not None:
         os.environ["http_proxy"] = proxies.get("http_proxy", "")
         os.environ["https_proxy"] = proxies.get("https_proxy", "")
@@ -100,9 +96,7 @@ def get_resource_token(machine_token, contracts_url=DEFAULT_CONTRACTS_URL, proxi
 
 
 def get_system_information() -> dict:
-    """
-    Fetches system information: kernel version, architecture, os, etc.
-    """
+    """Fetch system information: kernel version, architecture, os, etc."""
     system_information = {}
     with open("/etc/os-release") as f:
         reader = csv.reader(f, delimiter="=")
@@ -115,5 +109,6 @@ def get_system_information() -> dict:
 
 
 def run_uname(flag) -> str:
+    """Run uname command with the given flag."""
     result = subprocess.check_output(["uname", flag])
     return result.decode("utf-8").strip()
