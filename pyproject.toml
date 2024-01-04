@@ -1,0 +1,38 @@
+[tool.black]
+line-length = 120 # override black's default line-length
+exclude = '''
+/(
+    \.git
+  | \.mypy_cache
+  | \.tox
+  | venv
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+# make it compatible with black
+profile = "black"
+line_length = 120 # If this is removed, isort fights with Black
+
+
+# Linting tools configuration
+[tool.flake8]
+max-line-length = 120
+max-doc-length = 120
+max-complexity = 20
+exclude = [".git", "__pycache__", ".tox", "build", "dist", "*.egg_info", "venv"]
+select = ["E", "W", "F", "C", "N", "R", "H"]
+# Ignore W503, E501 because using black creates errors with this
+# Ignore D107 Missing docstring in __init__
+ignore = ["W503", "E501", "D107", "E402"]
+per-file-ignores = []
+docstring-convention = "google"
+# Check for properly formatted copyright header in each file
+copyright-check = "True"
+copyright-author = "Canonical Ltd."
+copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
