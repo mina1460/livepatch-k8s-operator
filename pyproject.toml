@@ -18,5 +18,3 @@ exclude = '''
 # make it compatible with black
 profile = "black"
 line_length = 120 # If this is removed, isort fights with Black
-
-
