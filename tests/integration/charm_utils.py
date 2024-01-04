@@ -22,7 +22,7 @@ async def fetch_charm(ops_test: OpsTest) -> str:
     except FileNotFoundError:
         charm_path = await ops_test.build_charm(".")
     logger.info("Charm path is: %s", charm_path)
-    return charm_path
+    return str(charm_path)
 
 
 def get_local_charm():

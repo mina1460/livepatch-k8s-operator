@@ -7,6 +7,7 @@ import csv
 import json
 import os
 import subprocess
+import typing as t
 
 import requests
 
@@ -28,7 +29,7 @@ def map_config_to_env_vars(charm, **additional_env):
     return {**env_mapped_config, **additional_env}
 
 
-def get_proxy_dict(cfg):
+def get_proxy_dict(cfg) -> t.Optional[dict]:
     """Generate an http proxy server configuration dictionary."""
     d = {
         "http_proxy": cfg.get("http_proxy", "") or os.environ.get("JUJU_CHARM_HTTP_PROXY", ""),
@@ -40,7 +41,7 @@ def get_proxy_dict(cfg):
     return d
 
 
-def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, proxies=None) -> str:
+def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, proxies=None) -> t.Optional[str]:
     """Retrieve a resource token for the livepatch-onprem resource."""
     if proxies is not None:
         os.environ["http_proxy"] = proxies.get("http_proxy", "")

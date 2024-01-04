@@ -5,6 +5,8 @@
 # Learn more at: https://juju.is/docs/sdk
 
 """Livepatch k8s charm."""
+import typing as t
+
 import pgsql
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.grafana_k8s.v0.grafana_dashboard import GrafanaDashboardProvider
@@ -32,7 +34,7 @@ DATABASE_RELATION_LEGACY = "database-legacy"
 REQUIRED_SETTINGS = {
     "server.url-template": "✘ server.url-template config not set",
 }
-ON_PREM_REQUIRED_SETTINGS = {}
+ON_PREM_REQUIRED_SETTINGS: t.Dict[str, str] = {}
 
 
 class LivepatchCharm(CharmBase):
@@ -266,9 +268,9 @@ class LivepatchCharm(CharmBase):
             if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
                 self.unit.status = ActiveStatus()
             return True
-        else:
-            LOGGER.error("cannot connect to workload container")
-            return False
+
+        LOGGER.error("cannot connect to workload container")
+        return False
 
     # Legacy database relation
 
@@ -450,7 +452,7 @@ class LivepatchCharm(CharmBase):
         except pebble.APIError as e:
             LOGGER.error(e)
             LOGGER.error("Schema migration failed")
-            raise (e)
+            raise e
 
         try:
             stdout, _ = process.wait_output()
@@ -462,9 +464,9 @@ class LivepatchCharm(CharmBase):
             for line in e.stderr.splitlines():
                 LOGGER.error("    %s", line)
             LOGGER.error("Schema migration failed - executing migration failed")
-            raise (e)
+            raise e
 
-    def schema_version_check_action(self, event) -> str:
+    def schema_version_check_action(self, event):
         """Check schema version action."""
         if not self._state.is_ready():
             event.defer()
@@ -477,6 +479,7 @@ class LivepatchCharm(CharmBase):
             LOGGER.error("cannot connect to the schema update container")
             return
         self.migration_is_required(container, db_uri)
+        return
 
     def migration_is_required(self, container, conn_str: str) -> bool:
         """Run a schema version check against the database."""

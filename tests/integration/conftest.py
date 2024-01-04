@@ -7,6 +7,7 @@ import logging
 
 import pytest
 import pytest_asyncio
+from charm_utils import fetch_charm
 from helpers import (
     ACTIVE_STATUS,
     APP_NAME,
@@ -18,8 +19,6 @@ from helpers import (
     perform_livepatch_integrations,
 )
 from pytest_operator.plugin import OpsTest
-
-from utils import fetch_charm
 
 logger = logging.getLogger(__name__)
 
