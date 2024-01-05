@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 .PHONY: microk8s-push operator-prod-k8s deploy-onprem-k8s

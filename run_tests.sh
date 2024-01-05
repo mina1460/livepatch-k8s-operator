@@ -1,5 +1,5 @@
 #!/bin/sh -e
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 if [ -z "$VIRTUAL_ENV"] && [-d venv/ ]; then

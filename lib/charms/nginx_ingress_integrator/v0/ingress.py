@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 """Library for the ingress relation.
@@ -128,9 +128,7 @@ class IngressRequires(Object):
         """Check our config dict for errors."""
         blocked_message = "Error in ingress relation, check `juju debug-log`"
         unknown = [
-            x
-            for x in self.config_dict
-            if x not in REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
+            x for x in self.config_dict if x not in REQUIRED_INGRESS_RELATION_FIELDS | OPTIONAL_INGRESS_RELATION_FIELDS
         ]
         if unknown:
             logger.error(
@@ -200,22 +198,12 @@ class IngressProvides(Object):
         }
 
         missing_fields = sorted(
-            [
-                field
-                for field in REQUIRED_INGRESS_RELATION_FIELDS
-                if ingress_data.get(field) is None
-            ]
+            [field for field in REQUIRED_INGRESS_RELATION_FIELDS if ingress_data.get(field) is None]
         )
 
         if missing_fields:
-            logger.error(
-                "Missing required data fields for ingress relation: {}".format(
-                    ", ".join(missing_fields)
-                )
-            )
-            self.model.unit.status = BlockedStatus(
-                "Missing fields for ingress: {}".format(", ".join(missing_fields))
-            )
+            logger.error("Missing required data fields for ingress relation: {}".format(", ".join(missing_fields)))
+            self.model.unit.status = BlockedStatus("Missing fields for ingress: {}".format(", ".join(missing_fields)))
 
         # Create an event that our charm can use to decide it's okay to
         # configure the ingress.

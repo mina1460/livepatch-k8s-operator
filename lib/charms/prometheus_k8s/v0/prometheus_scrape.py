@@ -1,8 +1,6 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
-# Copyright 2021 Canonical Ltd.
-# See LICENSE file for licensing details.
 """Prometheus Scrape Library.
 
 ## Overview
@@ -547,9 +545,7 @@ class PrometheusConfig:
                         unit_num = unit_name.split("/")[-1]
                         job_name = modified_job.get("job_name", "unnamed-job") + "-" + unit_num
                         modified_job["job_name"] = job_name
-                        modified_job["metrics_path"] = unit_path + (
-                            job.get("metrics_path") or "/metrics"
-                        )
+                        modified_job["metrics_path"] = unit_path + (job.get("metrics_path") or "/metrics")
 
                         if topology:
                             # Add topology labels
@@ -560,9 +556,9 @@ class PrometheusConfig:
                             }
 
                             # Instance relabeling for topology should be last in order.
-                            modified_job["relabel_configs"] = modified_job.get(
-                                "relabel_configs", []
-                            ) + [PrometheusConfig.topology_relabel_config_wildcard]
+                            modified_job["relabel_configs"] = modified_job.get("relabel_configs", []) + [
+                                PrometheusConfig.topology_relabel_config_wildcard
+                            ]
 
                         modified_scrape_jobs.append(modified_job)
 
@@ -639,10 +635,8 @@ class RelationInterfaceMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
-        self.message = (
-            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
-                relation_name, actual_relation_interface, expected_relation_interface
-            )
+        self.message = "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+            relation_name, actual_relation_interface, expected_relation_interface
         )
 
         super().__init__(self.message)
@@ -764,20 +758,14 @@ def _validate_relation_by_interface_and_direction(
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
-        raise RelationInterfaceMismatchError(
-            relation_name, expected_relation_interface, actual_relation_interface
-        )
+        raise RelationInterfaceMismatchError(relation_name, expected_relation_interface, actual_relation_interface)
 
     if expected_relation_role == RelationRole.provides:
         if relation_name not in charm.meta.provides:
-            raise RelationRoleMismatchError(
-                relation_name, RelationRole.provides, RelationRole.requires
-            )
+            raise RelationRoleMismatchError(relation_name, RelationRole.provides, RelationRole.requires)
     elif expected_relation_role == RelationRole.requires:
         if relation_name not in charm.meta.requires:
-            raise RelationRoleMismatchError(
-                relation_name, RelationRole.requires, RelationRole.provides
-            )
+            raise RelationRoleMismatchError(relation_name, RelationRole.requires, RelationRole.provides)
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
@@ -957,9 +945,7 @@ class AlertRules:
         return "_".join(filter(None, group_name_parts))
 
     @classmethod
-    def _multi_suffix_glob(
-        cls, dir_path: Path, suffixes: List[str], recursive: bool = True
-    ) -> list:
+    def _multi_suffix_glob(cls, dir_path: Path, suffixes: List[str], recursive: bool = True) -> list:
         """Helper function for getting all files in a directory that have a matching suffix.
 
         Args:
@@ -991,9 +977,7 @@ class AlertRules:
         alert_groups = []  # type: List[dict]
 
         # Gather all alerts into a list of groups
-        for file_path in self._multi_suffix_glob(
-            dir_path, [".rule", ".rules", ".yml", ".yaml"], recursive
-        ):
+        for file_path in self._multi_suffix_glob(dir_path, [".rule", ".rules", ".yml", ".yaml"], recursive):
             alert_groups_from_file = self._from_file(dir_path, file_path)
             if alert_groups_from_file:
                 logger.debug("Reading alert rule from %s", file_path)
@@ -1092,9 +1076,7 @@ class MetricsEndpointConsumer(Object):
         self._tool = CosTool(self._charm)
         events = self._charm.on[relation_name]
         self.framework.observe(events.relation_changed, self._on_metrics_provider_relation_changed)
-        self.framework.observe(
-            events.relation_departed, self._on_metrics_provider_relation_departed
-        )
+        self.framework.observe(events.relation_departed, self._on_metrics_provider_relation_departed)
 
     def _on_metrics_provider_relation_changed(self, event):
         """Handle changes with related metrics providers.
@@ -1225,9 +1207,7 @@ class MetricsEndpointConsumer(Object):
                     )
 
             if not identifier:
-                logger.error(
-                    "Alert rules were found but no usable group or identifier was present."
-                )
+                logger.error("Alert rules were found but no usable group or identifier was present.")
                 continue
 
             alerts[identifier] = alert_rules
@@ -1244,9 +1224,7 @@ class MetricsEndpointConsumer(Object):
 
         return alerts
 
-    def _get_identifier_by_alert_rules(
-        self, rules: dict
-    ) -> Tuple[Union[str, None], Union[JujuTopology, None]]:
+    def _get_identifier_by_alert_rules(self, rules: dict) -> Tuple[Union[str, None], Union[JujuTopology, None]]:
         """Determine an appropriate dict key for alert rules.
 
         The key is used as the filename when writing alerts to disk, so the structure
@@ -1373,9 +1351,7 @@ class MetricsEndpointConsumer(Object):
 
         hosts = self._relation_hosts(relation)
 
-        scrape_jobs = PrometheusConfig.expand_wildcard_targets_into_individual_jobs(
-            scrape_jobs, hosts, topology
-        )
+        scrape_jobs = PrometheusConfig.expand_wildcard_targets_into_individual_jobs(scrape_jobs, hosts, topology)
 
         return scrape_jobs
 
@@ -1386,9 +1362,9 @@ class MetricsEndpointConsumer(Object):
             # TODO deprecate and remove unit.name
             unit_name = relation.data[unit].get("prometheus_scrape_unit_name") or unit.name
             # TODO deprecate and remove "prometheus_scrape_host"
-            unit_address = relation.data[unit].get(
-                "prometheus_scrape_unit_address"
-            ) or relation.data[unit].get("prometheus_scrape_host")
+            unit_address = relation.data[unit].get("prometheus_scrape_unit_address") or relation.data[unit].get(
+                "prometheus_scrape_host"
+            )
             unit_path = relation.data[unit].get("prometheus_scrape_unit_path", "")
             if unit_name and unit_address:
                 hosts.update({unit_name: (unit_address, unit_path)})
@@ -1429,8 +1405,7 @@ def _dedupe_job_names(jobs: List[dict]):
     # Convert to a dict with job names as keys
     # I think this line is O(n^2) but it should be okay given the list sizes
     jobs_dict = {
-        job["job_name"]: list(filter(lambda x: x["job_name"] == job["job_name"], jobs_copy))
-        for job in jobs_copy
+        job["job_name"]: list(filter(lambda x: x["job_name"] == job["job_name"], jobs_copy)) for job in jobs_copy
     }
 
     # If multiple jobs have the same name, convert the name to "name_<hash-of-job>"
@@ -1650,9 +1625,7 @@ class MetricsEndpointProvider(Object):
         self._jobs = PrometheusConfig.sanitize_scrape_configs(jobs)
 
         if external_url:
-            external_url = (
-                external_url if urlparse(external_url).scheme else ("http://" + external_url)
-            )
+            external_url = external_url if urlparse(external_url).scheme else ("http://" + external_url)
         self.external_url = external_url
         self._lookaside_jobs = lookaside_jobs_callable
 
@@ -1767,9 +1740,7 @@ class MetricsEndpointProvider(Object):
 
             relation.data[self._charm.unit]["prometheus_scrape_unit_address"] = unit_address
             relation.data[self._charm.unit]["prometheus_scrape_unit_path"] = path
-            relation.data[self._charm.unit]["prometheus_scrape_unit_name"] = str(
-                self._charm.model.unit.name
-            )
+            relation.data[self._charm.unit]["prometheus_scrape_unit_name"] = str(self._charm.model.unit.name)
 
     def _is_valid_unit_address(self, address: str) -> bool:
         """Validate a unit address.
@@ -1996,9 +1967,7 @@ class MetricsEndpointAggregator(Object):
 
         relation_names = relation_names or {}
 
-        self._prometheus_relation = relation_names.get(
-            "prometheus", "downstream-prometheus-scrape"
-        )
+        self._prometheus_relation = relation_names.get("prometheus", "downstream-prometheus-scrape")
         self._target_relation = relation_names.get("scrape_target", "prometheus-target")
         self._alert_rules_relation = relation_names.get("alert_rules", "prometheus-rules")
 
@@ -2015,9 +1984,7 @@ class MetricsEndpointAggregator(Object):
         # manage list of Prometheus scrape jobs from related scrape targets
         target_events = self._charm.on[self._target_relation]
         self.framework.observe(target_events.relation_changed, self._on_prometheus_targets_changed)
-        self.framework.observe(
-            target_events.relation_departed, self._on_prometheus_targets_departed
-        )
+        self.framework.observe(target_events.relation_departed, self._on_prometheus_targets_departed)
 
         # manage alert rules for Prometheus from related scrape targets
         alert_rule_events = self._charm.on[self._alert_rules_relation]
@@ -2034,9 +2001,7 @@ class MetricsEndpointAggregator(Object):
         if not self._charm.unit.is_leader():
             return
 
-        jobs = [] + _type_convert_stored(
-            self._stored.jobs
-        )  # list of scrape jobs, one per relation
+        jobs = [] + _type_convert_stored(self._stored.jobs)  # list of scrape jobs, one per relation
         for relation in self.model.relations[self._target_relation]:
             targets = self._get_targets(relation)
             if targets and relation.app:
@@ -2161,9 +2126,7 @@ class MetricsEndpointAggregator(Object):
         Returns:
             a string Prometheus scrape job name for the application.
         """
-        return "juju_{}_{}_{}_prometheus_scrape".format(
-            self.model.name, self.model.uuid[:7], appname
-        )
+        return "juju_{}_{}_{}_prometheus_scrape".format(self.model.name, self.model.uuid[:7], appname)
 
     def _get_targets(self, relation) -> dict:
         """Fetch scrape targets for a relation.
@@ -2380,9 +2343,7 @@ class MetricsEndpointAggregator(Object):
                 changed_group["rules"] = rules_kept  # type: ignore
                 groups.append(changed_group)
 
-            relation.data[self._charm.app]["alert_rules"] = (
-                json.dumps({"groups": groups}) if groups else "{}"
-            )
+            relation.data[self._charm.app]["alert_rules"] = json.dumps({"groups": groups}) if groups else "{}"
 
             if not _type_convert_stored(self._stored.alert_rules) == groups:
                 self._stored.alert_rules = groups
@@ -2519,11 +2480,7 @@ class CosTool:
             except subprocess.CalledProcessError as e:
                 logger.debug("Validating the rules failed: %s", e.output)
                 return False, ", ".join(
-                    [
-                        line
-                        for line in e.output.decode("utf8").splitlines()
-                        if "error validating" in line
-                    ]
+                    [line for line in e.output.decode("utf8").splitlines() if "error validating" in line]
                 )
 
     def validate_scrape_jobs(self, jobs: list) -> bool:
@@ -2550,9 +2507,7 @@ class CosTool:
             logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
             return expression
         args = [str(self.path), "transform"]
-        args.extend(
-            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
-        )
+        args.extend(["--label-matcher={}={}".format(key, value) for key, value in topology.items()])
 
         args.extend(["{}".format(expression)])
         # noinspection PyBroadException
