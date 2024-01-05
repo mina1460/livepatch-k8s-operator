@@ -26,6 +26,7 @@ async def fetch_charm(ops_test: OpsTest) -> str:
 
 
 def get_local_charm():
+    """Search for an already built charm to save time."""
     charm = glob.glob("./*.charm")
     if len(charm) != 1:
         raise FileNotFoundError(f"Found {len(charm)} file(s) with .charm extension.")

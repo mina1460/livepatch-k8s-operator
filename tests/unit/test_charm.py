@@ -17,25 +17,32 @@ APP_NAME = "canonical-livepatch-server-k8s"
 
 
 class MockOutput:
+    """A wrapper class for command output and errors."""
+
     def __init__(self, stdout, stderr):
         self._stdout = stdout
         self._stderr = stderr
 
     def wait_output(self):
+        """return the stdout and stderr from running the command."""
         return self._stdout, self._stderr
 
 
-def mock_exec(_, command, environment):
+def mock_exec(_, command, environment) -> MockOutput:
+    """Mock Execute the commands."""
     if len(command) != 1:
         return MockOutput("", "unexpected number of commands")
-    if command[0] == "/usr/bin/pg_isready":
+    cmd: str = command[0]
+    if cmd == "/usr/bin/pg_isready":
         return MockOutput(0, "")
-    elif command[0] == "/usr/local/bin/livepatch-schema-tool upgrade /usr/src/livepatch/schema-upgrades":
+    if cmd == "/usr/local/bin/livepatch-schema-tool upgrade /usr/src/livepatch/schema-upgrades":
         return MockOutput("", "")
     return MockOutput("", "unexpected command")
 
 
 class TestCharm(unittest.TestCase):
+    """A wrapper class for charm unit tests."""
+
     def setUp(self):
         self.harness = Harness(LivepatchCharm)
         self.addCleanup(self.harness.cleanup)
@@ -44,14 +51,16 @@ class TestCharm(unittest.TestCase):
         self.harness.add_oci_resource("livepatch-schema-upgrade-tool-image")
         self.harness.begin()
 
-        self.tempdir = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tempdir.cleanup)
-        self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir.name)
+        with tempfile.TemporaryDirectory() as tempdir:
+            self.tempdir = tempdir
+            self.addCleanup(self.tempdir.cleanup)
+            self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir.name)
 
         self.harness.container_pebble_ready("livepatch")
         self.harness.container_pebble_ready("livepatch-schema-upgrade")
 
     def test_on_config_changed(self):
+        """A test for config changed hook."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
@@ -92,6 +101,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(environment, environment | required_environment)
 
     def test_missing_url_template_config_causes_blocked_state(self):
+        """A test for missing url template."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
@@ -162,6 +172,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_logrotate_config_pushed(self):
+        """assure that logrotate config is pushed."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, "canonical-livepatch-server-k8s/1")
 
@@ -174,6 +185,7 @@ class TestCharm(unittest.TestCase):
         self.assertIn("/var/log/livepatch {", config)
 
     def test_database_relations_are_mutually_exclusive__legacy_first(self):
+        """ "assure that database relations are mutually exclusive."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
@@ -207,6 +219,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_database_relations_are_mutually_exclusive__standard_first(self):
+        """ "assure that database relations are mutually exclusive."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
@@ -240,6 +253,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_postgres_patch_storage_config_sets_in_container(self):
+        """A test for postgres patch storage config in container."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
@@ -275,6 +289,7 @@ class TestCharm(unittest.TestCase):
         self.assertEqual(environment, environment | required_environment)
 
     def test_postgres_patch_storage_config_defaults_to_database_relation(self):
+        """A test for postgres patch storage config."""
         rel_id = self.harness.add_relation("livepatch", "livepatch")
         self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)

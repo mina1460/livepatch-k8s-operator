@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 @pytest.mark.abort_on_fail
 @pytest.mark.usefixtures("app")
 class TestDeployment:
+    """A wrapper class for deployment tests"""
+
     async def test_application_is_up(self, ops_test: OpsTest):
         """The app is up and running."""
 

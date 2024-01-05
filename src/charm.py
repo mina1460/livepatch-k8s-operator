@@ -108,6 +108,13 @@ class LivepatchCharm(CharmBase):
         # Grafana dashboard relation
         self._grafana_dashboards = GrafanaDashboardProvider(self, relation_name="grafana-dashboard")
 
+    def check_ready_state_and_defer(self, event):
+        """Check that the state is ready, and if not, defer the event."""
+        if not self._state.is_ready():
+            event.defer()
+            LOGGER.warning("State is not ready")
+            return
+
     def on_config_changed(self, event):
         """On config changed hook, which runs first."""
         self._update_workload_container_config(event)
@@ -147,22 +154,15 @@ class LivepatchCharm(CharmBase):
                 container.stop(LIVEPATCH_SERVICE_NAME)
         self.unit.status = WaitingStatus("service stopped")
 
-    def _update_workload_container_config(self, event):
-        """Update workload with all available configuration data."""
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
-
-        # Quickly update logrotates config each workload update
-        self._push_to_workload(LOGROTATE_CONFIG_PATH, self._get_logrotate_config(), event)
-
+    def handle_schema_upgrade(self, event):
+        """Check if a schema upgrade is required, and perform it."""
         dsn = self._state.dsn
         if not dsn:
             LOGGER.info("waiting for PG connection string")
             self.unit.status = BlockedStatus("Waiting for postgres relation to be established.")
             event.defer()
             return
+
         schema_container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
         if not schema_container.can_connect():
             LOGGER.error("cannot connect to the schema update container")
@@ -174,14 +174,47 @@ class LivepatchCharm(CharmBase):
         try:
             upgrade_required = self.migration_is_required(schema_container, dsn)
         except Exception as e:
-            LOGGER.error("Failed to determe if schema upgrade required.")
+            LOGGER.error(f"Failed to determe if schema upgrade required: {e}")
             self.unit.status = WaitingStatus("Unable to determine database readiness")
-            LOGGER.error(e)
             event.defer()
             return
+
         if upgrade_required:
             self.schema_upgrade(schema_container, dsn)
 
+        return
+
+    def get_env_vars(self) -> dict:
+        """Map config to env vars and return a processed dict."""
+        env_vars = utils.map_config_to_env_vars(self)
+
+        # Some extra config and checks
+        env_vars["LP_PATCH_SYNC_TOKEN"] = self._state.resource_token
+        env_vars["LP_DATABASE_CONNECTION_STRING"] = self._state.dsn
+        env_vars["LP_SERVER_SERVER_ADDRESS"] = f":{SERVER_PORT}"
+        if self.config.get("patch-sync.enabled") is True:
+            # TODO: Find a better way to identify a on-prem syncing instance.
+            env_vars["LP_PATCH_SYNC_ID"] = self.model.uuid
+
+        if self.config.get("patch-storage.type") == "postgres":
+            postgres_patch_storage_dsn = (
+                self.config.get("patch-storage.postgres-connection-string", "") or self._state.dsn
+            )
+            env_vars["LP_PATCH_STORAGE_POSTGRES_CONNECTION_STRING"] = postgres_patch_storage_dsn
+
+        # remove empty environment values
+        env_vars = {key: value for key, value in env_vars.items() if value}
+
+        return env_vars
+
+    def _update_workload_container_config(self, event):
+        """Update workload with all available configuration data."""
+        self.check_ready_state_and_defer(event)
+
+        # Quickly update logrotates config each workload update
+        self._push_to_workload(LOGROTATE_CONFIG_PATH, self._get_logrotate_config(), event)
+
+        self.handle_schema_upgrade(event)
         # This token comes from an action rather than config so we check for it specifically.
         if not self.config.get("server.is-hosted"):
             if self._state.resource_token is None or self._state.resource_token:
@@ -196,65 +229,47 @@ class LivepatchCharm(CharmBase):
             required_settings.update(ON_PREM_REQUIRED_SETTINGS)
 
         for setting, error_msg in required_settings.items():
-            if self.config.get(setting) is None or self.config.get(setting) == "":
+            if not self.config.get(setting):
                 self.unit.status = BlockedStatus(error_msg)
                 LOGGER.warning(error_msg)
                 return
 
-        env_vars = utils.map_config_to_env_vars(self)
-
-        # Some extra config and checks
-        env_vars["LP_PATCH_SYNC_TOKEN"] = self._state.resource_token
-        env_vars["LP_DATABASE_CONNECTION_STRING"] = dsn
-        env_vars["LP_SERVER_SERVER_ADDRESS"] = f":{SERVER_PORT}"
-        if self.config.get("patch-sync.enabled") is True:
-            # TODO: Find a better way to identify a on-prem syncing instance.
-            env_vars["LP_PATCH_SYNC_ID"] = self.model.uuid
-
-        if self.config.get("patch-storage.type") == "postgres":
-            postgres_patch_storage_dsn = self.config.get("patch-storage.postgres-connection-string", "") or dsn
-            env_vars["LP_PATCH_STORAGE_POSTGRES_CONNECTION_STRING"] = postgres_patch_storage_dsn
-
-        # remove empty environment values
-        env_vars = {key: value for key, value in env_vars.items() if value}
-
         workload_container = self.unit.get_container(WORKLOAD_CONTAINER)
-        if workload_container.can_connect():
-            update_config_environment_layer = {
-                "services": {
-                    LIVEPATCH_SERVICE_NAME: {
-                        "summary": "Livepatch Service",
-                        "description": "Pebble config layer for livepatch",
-                        "override": "merge",
-                        "startup": "disabled",
-                        "command": "sh -c '/usr/local/bin/livepatch-server | tee /var/log/livepatch'",
-                        "environment": env_vars,
-                    },
-                },
-                "checks": {
-                    "livepatch-check": {
-                        "override": "replace",
-                        "period": "1m",
-                        "http": {"url": f"http://localhost:{SERVER_PORT}/debug/info"},
-                    }
-                },
-            }
-            layer_label = "livepatch"
-            workload_container.add_layer(layer_label, update_config_environment_layer, combine=True)
-            if self._ready(workload_container):
-                if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
-                    LOGGER.info("Replanning services")
-                    workload_container.replan()
-                else:
-                    LOGGER.info("Starting Livepatch services")
-                    workload_container.start(LIVEPATCH_SERVICE_NAME)
-            else:
-                self.unit.status = WaitingStatus("Service is not ready")
-                return
-        else:
+        if not workload_container.can_connect():
             LOGGER.info("workload container not ready - deferring")
             self.unit.status = WaitingStatus("Waiting to connect - workload container")
             event.defer()
+            return
+        update_config_environment_layer = {
+            "services": {
+                LIVEPATCH_SERVICE_NAME: {
+                    "summary": "Livepatch Service",
+                    "description": "Pebble config layer for livepatch",
+                    "override": "merge",
+                    "startup": "disabled",
+                    "command": "sh -c '/usr/local/bin/livepatch-server | tee /var/log/livepatch'",
+                    "environment": self.get_env_vars(),
+                },
+            },
+            "checks": {
+                "livepatch-check": {
+                    "override": "replace",
+                    "period": "1m",
+                    "http": {"url": f"http://localhost:{SERVER_PORT}/debug/info"},
+                }
+            },
+        }
+        layer_label = "livepatch"
+        workload_container.add_layer(layer_label, update_config_environment_layer, combine=True)
+        if self._ready(workload_container):
+            if workload_container.get_service(LIVEPATCH_SERVICE_NAME).is_running():
+                LOGGER.info("Replanning services")
+                workload_container.replan()
+            else:
+                LOGGER.info("Starting Livepatch services")
+                workload_container.start(LIVEPATCH_SERVICE_NAME)
+        else:
+            self.unit.status = WaitingStatus("Service is not ready")
             return
 
         self.unit.status = ActiveStatus()
@@ -278,12 +293,9 @@ class LivepatchCharm(CharmBase):
         """
         Handle determining if the database (on legacy database relation) has finished setup.
 
-        once setup is complete a master/standby may join / change in consequent events.
+        once setup is complete a primary/standby may join / change in consequent events.
         """
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
+        self.check_ready_state_and_defer(event)
 
         LOGGER.info("(postgresql, legacy database relation) RELATION_JOINED event fired.")
 
@@ -304,14 +316,11 @@ class LivepatchCharm(CharmBase):
 
     def _on_legacy_db_master_changed(self, event: pgsql.MasterChangedEvent) -> None:
         """
-        Handle master units of postgres joining / changing (for the legacy database relation).
+        Handle primary units of postgres joining / changing (for the legacy database relation).
 
         The internal snap configuration is updated to reflect this.
         """
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
+        self.check_ready_state_and_defer(event)
 
         LOGGER.info("(postgresql, legacy database relation) MASTER_CHANGED event fired.")
 
@@ -323,11 +332,13 @@ class LivepatchCharm(CharmBase):
             self.set_status_and_log(
                 "(legacy database relation) Updating application database connection...", WaitingStatus
             )
+            # wokeignore:rule=master
             if event.master is not None:
                 # Note (babakks): The split is mainly to drop query parameters that may cause further database
                 # connection errors. For example, there's this query parameters, named `fallback_application_name`,
                 # which causes the schema upgrade command to return `unrecognized configuration parameter
                 # "fallback_application_name" (SQLSTATE 42704)`.
+                # wokeignore:rule=master
                 db_uri = event.master.uri.split("?", 1)[0]
                 self._state.dsn = db_uri
 
@@ -336,7 +347,7 @@ class LivepatchCharm(CharmBase):
     def _on_legacy_db_standby_changed(self, event: pgsql.StandbyChangedEvent):
         LOGGER.info("(postgresql, legacy database relation) STANDBY_CHANGED event fired.")
         # NOTE NOTE NOTE
-        # This should be used for none-master on-prem instances when configuring
+        # This should be used for non-primary on-prem instances when configuring
         # additional livepatch instances, enabling us to read from standbys
         if event.database != DATABASE_NAME:
             # Leader has not yet set requirements. Wait until next event,
@@ -360,10 +371,7 @@ class LivepatchCharm(CharmBase):
 
         LOGGER.info("(postgresql) RELATION_JOINED event fired.")
 
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
+        self.check_ready_state_and_defer(event)
 
         if self._is_legacy_database_relation_activated():
             LOGGER.error(f"The `{DATABASE_RELATION_LEGACY}` relation is already integrated.")
@@ -385,7 +393,7 @@ class LivepatchCharm(CharmBase):
         # compose the db connection string
         uri = f"postgresql://{event.username}:{event.password}@{ep}/{DATABASE_NAME}"
 
-        LOGGER.info("received database uri: {}".format(uri))
+        LOGGER.info(f"received database uri: {uri}")
 
         # record the connection string
         self._state.dsn = uri
@@ -410,10 +418,7 @@ class LivepatchCharm(CharmBase):
 
     def schema_upgrade_action(self, event):
         """Run the schema upgrade action."""
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
+        self.check_ready_state_and_defer(event)
 
         db_uri = self._state.dsn
         container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
@@ -468,10 +473,7 @@ class LivepatchCharm(CharmBase):
 
     def schema_version_check_action(self, event):
         """Check schema version action."""
-        if not self._state.is_ready():
-            event.defer()
-            LOGGER.warning("State is not ready")
-            return
+        self.check_ready_state_and_defer(event)
 
         db_uri = self._state.dsn
         container = self.unit.get_container(SCHEMA_UPGRADE_CONTAINER)
@@ -518,9 +520,7 @@ class LivepatchCharm(CharmBase):
                 # If command has a non-zero exit code then migrations are pending.
                 LOGGER.info("Migrations pending")
                 return True
-            else:
-                # Other exit codes indicate a problem
-                raise e
+            raise e
 
     def get_resource_token_action(self, event):
         """Retrieve the livepatch resource token from ua-contracts."""
@@ -574,7 +574,7 @@ class LivepatchCharm(CharmBase):
         """Create file on the workload container with the specified content."""
         container = self.unit.get_container(WORKLOAD_CONTAINER)
         if container.can_connect():
-            LOGGER.info("pushing file {} to the workload container".format(filename))
+            LOGGER.info(f"pushing file {filename} to the workload container")
             container.push(filename, content, make_dirs=True)
         else:
             LOGGER.info("workload container not ready - deferring")

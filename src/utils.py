@@ -62,10 +62,15 @@ def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, 
         },
     }
 
-    headers = {"Authorization": "Bearer {}".format(contract_token), "Content-Type": "application/json"}
+    headers = {
+        "Authorization": f"Bearer {contract_token}",
+        "Content-Type": "application/json",
+    }
     try:
         response = requests.post(
-            url="{}/v1/context/machines/token".format(contracts_url), data=json.dumps(payload), headers=headers
+            url=f"{contracts_url}/v1/context/machines/token",
+            data=json.dumps(payload),
+            headers=headers,
         )
         data = response.json()
         return data.get("machineToken", "")
@@ -82,10 +87,10 @@ def get_resource_token(machine_token, contracts_url=DEFAULT_CONTRACTS_URL, proxi
         os.environ["https_proxy"] = proxies.get("https_proxy", "")
         os.environ["no_proxy"] = proxies.get("no_proxy", "")
 
-    headers = {"Authorization": "Bearer {}".format(machine_token)}
+    headers = {"Authorization": f"Bearer {machine_token}"}
     try:
         req = requests.get(
-            url="{}/v1/resources/{}/context/machines/livepatch-onprem".format(contracts_url, RESOURCE_NAME),
+            url=f"{contracts_url}/v1/resources/{RESOURCE_NAME}/context/machines/livepatch-onprem",
             headers=headers,
         )
         data = req.json()
