@@ -1,0 +1,33 @@
+name: Upload charm
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifact_id:
+        type: string
+        required: true
+
+jobs:
+  upload_charm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          repository: canonical/livepatch-server
+          github-token: "${{ secrets.GH_PAT }}"
+
+      - name: load images into local docker registry
+        run: |
+          echo "${{ inputs.artifact_id }}"
+          docker load -i livepatch-server.tar
+          docker load -i schema-tool.tar
+
+      - name: Upload charm to charmhub
+        uses: canonical/charming-actions/upload-charm@main
+        with:
+          credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
+          github-token: "${{ secrets.GH_PAT }}"
+          channel: "latest/edge"
+          pull-image: "false"
+          tag-prefix: "k8s"
