@@ -15,6 +15,8 @@ from src.charm import LivepatchCharm
 
 APP_NAME = "canonical-livepatch-server-k8s"
 
+TEST_TOKEN = "test-token"  # nosec
+
 
 class MockOutput:
     """A wrapper class for command output and errors."""
@@ -66,7 +68,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
-        self.harness.charm._state.resource_token = "test-token"
+        self.harness.charm._state.resource_token = TEST_TOKEN
 
         container = self.harness.model.unit.get_container("livepatch")
         with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
@@ -107,7 +109,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
-        self.harness.charm._state.resource_token = "test-token"
+        self.harness.charm._state.resource_token = TEST_TOKEN
 
         container = self.harness.model.unit.get_container("livepatch")
         with patch("src.charm.LivepatchCharm.migration_is_required") as migration:
@@ -259,7 +261,7 @@ class TestCharm(unittest.TestCase):
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
-        self.harness.charm._state.resource_token = "test-token"
+        self.harness.charm._state.resource_token = TEST_TOKEN
 
         container = self.harness.model.unit.get_container("livepatch")
         with patch("src.charm.LivepatchCharm.migration_is_required") as migration:

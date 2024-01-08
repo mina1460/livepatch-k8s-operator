@@ -20,6 +20,11 @@ profile = "black"
 line_length = 120 # If this is removed, isort fights with Black
 
 
+[tool.bandit]
+exclude_dirs = ["/venv/"]
+[tool.bandit.assert_used]
+skips = ["*tests/*", "*_test.py", "*test_*.py"]
+
 # Linting tools configuration
 [tool.flake8]
 max-line-length = 120

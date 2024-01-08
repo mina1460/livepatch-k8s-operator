@@ -6,7 +6,7 @@
 import csv
 import json
 import os
-import subprocess
+import platform
 import typing as t
 
 import requests
@@ -71,6 +71,7 @@ def get_machine_token(contract_token: str, contracts_url=DEFAULT_CONTRACTS_URL, 
             url=f"{contracts_url}/v1/context/machines/token",
             data=json.dumps(payload),
             headers=headers,
+            timeout=60,
         )
         data = response.json()
         return data.get("machineToken", "")
@@ -92,6 +93,7 @@ def get_resource_token(machine_token, contracts_url=DEFAULT_CONTRACTS_URL, proxi
         req = requests.get(
             url=f"{contracts_url}/v1/resources/{RESOURCE_NAME}/context/machines/livepatch-onprem",
             headers=headers,
+            timeout=60,
         )
         data = req.json()
         return data.get("resourceToken", "")
@@ -109,12 +111,6 @@ def get_system_information() -> dict:
         for row in reader:
             if row:
                 system_information[row[0].lower()] = row[1]
-    system_information["kernel-version"] = run_uname("-r")
-    system_information["architecture"] = run_uname("-m")
+    system_information["kernel-version"] = platform.uname().release
+    system_information["architecture"] = platform.machine()
     return system_information
-
-
-def run_uname(flag) -> str:
-    """Run uname command with the given flag."""
-    result = subprocess.check_output(["uname", flag])
-    return result.decode("utf-8").strip()

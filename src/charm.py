@@ -535,7 +535,7 @@ class LivepatchCharm(CharmBase):
             return
 
         contract_token = event.params.get("contract-token", "")
-        if contract_token == "":
+        if not contract_token:
             event.set_results({"error": "cannot fetch the resource token: no contract token provided"})
             return
         proxies = utils.get_proxy_dict(self.config)
