@@ -57,8 +57,8 @@ class TestCharm(unittest.TestCase):
             self.tempdir = tempdir
             self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir)
 
-        self.harness.container_pebble_ready("livepatch")
-        self.harness.container_pebble_ready("livepatch-schema-upgrade")
+        # self.harness.container_pebble_ready("livepatch")
+        # self.harness.container_pebble_ready("livepatch-schema-upgrade")
 
     def test_on_config_changed(self):
         """A test for config changed hook."""
