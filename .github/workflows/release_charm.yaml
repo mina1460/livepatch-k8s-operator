@@ -19,7 +19,7 @@ jobs:
 
       - name: load images into local docker registry
         run: |
-          echo "${{ inputs.artifact_id }}"
+          echo "artifact_id: ${{ inputs.artifact_id }}"
           docker load -i livepatch-server.tar
           docker load -i schema-tool.tar
 
