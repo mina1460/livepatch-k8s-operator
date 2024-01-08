@@ -2,8 +2,11 @@
 # Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# shellcheck disable=SC1091
+dir_root=$(dirname "$(readlink -f "$0")")
+
 if [ -z "$VIRTUAL_ENV" ] && [ -d venv/ ]; then
-    . venv/bin/activate
+    . "$dir_root/venv/bin/activate"
 fi
 
 if [ -z "$PYTHONPATH" ]; then
