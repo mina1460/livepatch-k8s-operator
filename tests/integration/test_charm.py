@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.usefixtures("app")
+@pytest.mark.usefixtures("deploy")
 class TestDeployment:
     """A wrapper class for deployment tests"""
 
