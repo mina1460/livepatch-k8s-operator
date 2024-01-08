@@ -55,8 +55,7 @@ class TestCharm(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tempdir:
             self.tempdir = tempdir
-            self.addCleanup(self.tempdir.cleanup)
-            self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir.name)
+            self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir)
 
         self.harness.container_pebble_ready("livepatch")
         self.harness.container_pebble_ready("livepatch-schema-upgrade")
