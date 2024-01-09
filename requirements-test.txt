@@ -1,5 +1,4 @@
 pytest
-asynctest
 pytest-operator
 pytest-order
 pytest-sugar

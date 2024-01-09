@@ -9,6 +9,7 @@ jobs:
     name: Integration tests (microk8s)
     runs-on: ubuntu-latest
     steps:
+      - run: sudo apt install libffi-dev
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup operator environment
