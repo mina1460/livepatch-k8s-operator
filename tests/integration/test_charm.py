@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 import logging
@@ -14,8 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
-@pytest.mark.usefixtures("app")
+@pytest.mark.usefixtures("deploy")
 class TestDeployment:
+    """A wrapper class for deployment tests"""
+
+    @pytest.mark.skip("Pass until the action that uploads the oci images as artifacts in the server is merged.")
     async def test_application_is_up(self, ops_test: OpsTest):
         """The app is up and running."""
 

@@ -1,9 +1,12 @@
 #!/bin/sh -e
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
-if [ -z "$VIRTUAL_ENV" -a -d venv/ ]; then
-    . venv/bin/activate
+# shellcheck disable=SC1091
+dir_root=$(dirname "$(readlink -f "$0")")
+
+if [ -z "$VIRTUAL_ENV" ] && [ -d venv/ ]; then
+    . "$dir_root/venv/bin/activate"
 fi
 
 if [ -z "$PYTHONPATH" ]; then

@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 
@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.skip_if_deployed
 @pytest_asyncio.fixture(name="deploy", scope="module")
-async def app(ops_test: OpsTest):
+async def deploy(ops_test: OpsTest):
+    """Build and deploy the app and its components."""
     logger.info("Building local charm")
     charm = await fetch_charm(ops_test)
     jammy = "ubuntu@22.04"

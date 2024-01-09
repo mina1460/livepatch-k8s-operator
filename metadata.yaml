@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # See LICENSE file for licensing details.
 #
 # For a complete list of supported options, see:
@@ -16,6 +16,7 @@ maintainers:
 website: https://ubuntu.com/security/livepatch
 docs: https://discourse.ubuntu.com/t/ubuntu-livepatch-service/22723
 issues: https://bugs.launchpad.net/livepatch-onprem
+source: https://github.com/canonical/livepatch-k8s-operator
 
 subordinate: false
 tags:

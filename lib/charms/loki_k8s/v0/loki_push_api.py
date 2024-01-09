@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
-# Copyright 2021 Canonical Ltd.
-# See LICENSE file for licensing details.
 #
 # Learn more at: https://juju.is/docs/sdk
 
@@ -543,10 +541,8 @@ class RelationInterfaceMismatchError(Exception):
         self.relation_name = relation_name
         self.expected_relation_interface = expected_relation_interface
         self.actual_relation_interface = actual_relation_interface
-        self.message = (
-            "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
-                relation_name, actual_relation_interface, expected_relation_interface
-            )
+        self.message = "The '{}' relation has '{}' as interface rather than the expected '{}'".format(
+            relation_name, actual_relation_interface, expected_relation_interface
         )
         super().__init__(self.message)
 
@@ -607,20 +603,14 @@ def _validate_relation_by_interface_and_direction(
 
     actual_relation_interface = relation.interface_name
     if actual_relation_interface != expected_relation_interface:
-        raise RelationInterfaceMismatchError(
-            relation_name, expected_relation_interface, actual_relation_interface
-        )
+        raise RelationInterfaceMismatchError(relation_name, expected_relation_interface, actual_relation_interface)
 
     if expected_relation_role == RelationRole.provides:
         if relation_name not in charm.meta.provides:
-            raise RelationRoleMismatchError(
-                relation_name, RelationRole.provides, RelationRole.requires
-            )
+            raise RelationRoleMismatchError(relation_name, RelationRole.provides, RelationRole.requires)
     elif expected_relation_role == RelationRole.requires:
         if relation_name not in charm.meta.requires:
-            raise RelationRoleMismatchError(
-                relation_name, RelationRole.requires, RelationRole.provides
-            )
+            raise RelationRoleMismatchError(relation_name, RelationRole.requires, RelationRole.provides)
     else:
         raise Exception("Unexpected RelationDirection: {}".format(expected_relation_role))
 
@@ -808,9 +798,7 @@ class AlertRules:
             # Note that Path doesn't actually care whether the path is valid just to instantiate
             # the object, so we can happily strip that stuff out to make templating nicer
             rel_path = Path(
-                re.sub(r"^([A-Za-z]+:)?/", "", rel_path.as_posix())
-                if rel_path.is_absolute()
-                else str(rel_path)
+                re.sub(r"^([A-Za-z]+:)?/", "", rel_path.as_posix()) if rel_path.is_absolute() else str(rel_path)
             )
 
             # Get rid of relative path characters in the middle which both os.path and pathlib
@@ -828,9 +816,7 @@ class AlertRules:
         return "_".join(filter(lambda x: x, group_name_parts))
 
     @classmethod
-    def _multi_suffix_glob(
-        cls, dir_path: Path, suffixes: List[str], recursive: bool = True
-    ) -> list:
+    def _multi_suffix_glob(cls, dir_path: Path, suffixes: List[str], recursive: bool = True) -> list:
         """Helper function for getting all files in a directory that have a matching suffix.
 
         Args:
@@ -939,10 +925,8 @@ class NoRelationWithInterfaceFoundError(Exception):
     def __init__(self, charm: CharmBase, relation_interface: Optional[str] = None):
         self.charm = charm
         self.relation_interface = relation_interface
-        self.message = (
-            "No relations with interface '{}' found in the meta of the '{}' charm".format(
-                relation_interface, charm.meta.name
-            )
+        self.message = "No relations with interface '{}' found in the meta of the '{}' charm".format(
+            relation_interface, charm.meta.name
         )
 
         super().__init__(self.message)
@@ -955,10 +939,8 @@ class MultipleRelationsWithInterfaceFoundError(Exception):
         self.charm = charm
         self.relation_interface = relation_interface
         self.relations = relations
-        self.message = (
-            "Multiple relations with interface '{}' found in the meta of the '{}' charm.".format(
-                relation_interface, charm.meta.name
-            )
+        self.message = "Multiple relations with interface '{}' found in the meta of the '{}' charm.".format(
+            relation_interface, charm.meta.name
         )
         super().__init__(self.message)
 
@@ -1005,9 +987,7 @@ class LokiPushApiAlertRulesChanged(EventBase):
 
     def restore(self, snapshot: dict):
         """Restore event information."""
-        self.relation = self.framework.model.get_relation(
-            snapshot["relation_name"], snapshot["relation_id"]
-        )
+        self.relation = self.framework.model.get_relation(snapshot["relation_name"], snapshot["relation_id"])
         app_name = snapshot.get("app_name")
         if app_name:
             self.app = self.framework.model.get_app(app_name)
@@ -1225,9 +1205,7 @@ class LokiPushApiProvider(Object):
         # construct promtail binary url paths from parts
         promtail_binaries = {}
         for arch, info in PROMTAIL_BINARIES.items():
-            info["url"] = "{}/promtail-{}/{}.gz".format(
-                PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"]
-            )
+            info["url"] = "{}/promtail-{}/{}.gz".format(PROMTAIL_BASE_URL, PROMTAIL_VERSION, info["filename"])
             promtail_binaries[arch] = info
 
         return {"promtail_binary_zip_url": json.dumps(promtail_binaries)}
@@ -1339,9 +1317,7 @@ class LokiPushApiProvider(Object):
                     )
 
             if not identifier:
-                logger.error(
-                    "Alert rules were found but no usable group or identifier was present."
-                )
+                logger.error("Alert rules were found but no usable group or identifier was present.")
                 continue
 
             _, errmsg = self._tool.validate_alert_rules(alert_rules)
@@ -1353,9 +1329,7 @@ class LokiPushApiProvider(Object):
 
         return alerts
 
-    def _get_identifier_by_alert_rules(
-        self, rules: dict
-    ) -> Tuple[Union[str, None], Union[JujuTopology, None]]:
+    def _get_identifier_by_alert_rules(self, rules: dict) -> Tuple[Union[str, None], Union[JujuTopology, None]]:
         """Determine an appropriate dict key for alert rules.
 
         The key is used as the filename when writing alerts to disk, so the structure
@@ -1479,9 +1453,7 @@ class ConsumerBase(Object):
         if not self._charm.unit.is_leader():
             return
 
-        alert_rules = (
-            AlertRules(None) if self._skip_alert_topology_labeling else AlertRules(self.topology)
-        )
+        alert_rules = AlertRules(None) if self._skip_alert_topology_labeling else AlertRules(self.topology)
         alert_rules.add_path(self._alert_rules_path, recursive=self._recursive)
         alert_rules_as_dict = alert_rules.as_dict()
 
@@ -1578,9 +1550,7 @@ class LokiPushApiConsumer(ConsumerBase):
         _validate_relation_by_interface_and_direction(
             charm, relation_name, RELATION_INTERFACE_NAME, RelationRole.requires
         )
-        super().__init__(
-            charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling
-        )
+        super().__init__(charm, relation_name, alert_rules_path, recursive, skip_alert_topology_labeling)
         events = self._charm.on[relation_name]
         self.framework.observe(self._charm.on.upgrade_charm, self._on_lifecycle_event)
         self.framework.observe(events.relation_joined, self._on_logging_relation_joined)
@@ -1852,9 +1822,7 @@ class LogProxyConsumer(ConsumerBase):
 
             new_config = self._promtail_config
             if new_config != self._current_config:
-                self._container.push(
-                    WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True
-                )
+                self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(new_config), make_dirs=True)
 
             # Loki may send endpoints late. Don't necessarily start, there may be
             # no clients
@@ -2071,9 +2039,7 @@ class LogProxyConsumer(ConsumerBase):
                 result = sha256(file_bytes).hexdigest()
 
                 if result != sha256sum:
-                    msg = "File sha256sum mismatch, expected:'{}' but got '{}'".format(
-                        sha256sum, result
-                    )
+                    msg = "File sha256sum mismatch, expected:'{}' but got '{}'".format(sha256sum, result)
                     logger.debug(msg)
                     return False
 
@@ -2147,8 +2113,7 @@ class LogProxyConsumer(ConsumerBase):
             return yaml.safe_load(raw_current)
         except (ProtocolError, PathError) as e:
             logger.warning(
-                "Could not check the current promtail configuration due to "
-                "a failure in retrieving the file: %s",
+                "Could not check the current promtail configuration due to " "a failure in retrieving the file: %s",
                 e,
             )
             return {}
@@ -2201,8 +2166,7 @@ class LogProxyConsumer(ConsumerBase):
 
         # The new JujuTopology doesn't include unit, but LogProxyConsumer should have it
         common_labels = {
-            "juju_{}".format(k): v
-            for k, v in self.topology.as_dict(remapped_keys={"charm_name": "charm"}).items()
+            "juju_{}".format(k): v for k, v in self.topology.as_dict(remapped_keys={"charm_name": "charm"}).items()
         }
         scrape_configs = []
 
@@ -2270,14 +2234,10 @@ class LogProxyConsumer(ConsumerBase):
         relations = self._charm.model.relations[self._relation_name]
         if len(relations) > 1:
             logger.debug(
-                "Multiple log_proxy relations. Getting Promtail from application {}".format(
-                    relations[0].app.name
-                )
+                "Multiple log_proxy relations. Getting Promtail from application {}".format(relations[0].app.name)
             )
         relation = relations[0]
-        promtail_binaries = json.loads(
-            relation.data[relation.app].get("promtail_binary_zip_url", "{}")
-        )
+        promtail_binaries = json.loads(relation.data[relation.app].get("promtail_binary_zip_url", "{}"))
         if not promtail_binaries:
             return
 
@@ -2290,14 +2250,10 @@ class LogProxyConsumer(ConsumerBase):
                 self.on.promtail_digest_error.emit(msg)
                 return
 
-        workload_binary_path = os.path.join(
-            WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"]
-        )
+        workload_binary_path = os.path.join(WORKLOAD_BINARY_DIR, promtail_binaries[self._arch]["filename"])
 
         self._create_directories()
-        self._container.push(
-            WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True
-        )
+        self._container.push(WORKLOAD_CONFIG_PATH, yaml.safe_dump(self._promtail_config), make_dirs=True)
 
         self._add_pebble_layer(workload_binary_path)
 
@@ -2431,9 +2387,7 @@ class CosTool:
             logger.debug("`cos-tool` unavailable. Leaving expression unchanged: %s", expression)
             return expression
         args = [str(self.path), "--format", "logql", "transform"]
-        args.extend(
-            ["--label-matcher={}={}".format(key, value) for key, value in topology.items()]
-        )
+        args.extend(["--label-matcher={}={}".format(key, value) for key, value in topology.items()])
 
         args.extend(["{}".format(expression)])
         # noinspection PyBroadException

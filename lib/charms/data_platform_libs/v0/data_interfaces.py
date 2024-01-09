@@ -1,4 +1,4 @@
-# Copyright 2023 Canonical Ltd.
+# Copyright 2024 Canonical Ltd.
 # Licensed under the Apache2.0. See LICENSE file in charm source for details.
 
 # Copyright 2023 Canonical Ltd.
@@ -351,9 +351,7 @@ def diff(event: RelationChangedEvent, bucket: str) -> Diff:
     # Retrieve the old data from the data key in the application relation databag.
     old_data = json.loads(event.relation.data[bucket].get("data", "{}"))
     # Retrieve the new data from the event relation databag.
-    new_data = {
-        key: value for key, value in event.relation.data[event.app].items() if key != "data"
-    }
+    new_data = {key: value for key, value in event.relation.data[event.app].items() if key != "data"}
 
     # These are the keys that were added to the databag and triggered this event.
     added = new_data.keys() - old_data.keys()
@@ -415,9 +413,7 @@ class DataProvides(Object, ABC):
         """
         data = {}
         for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[relation.app].items() if key != "data"
-            }
+            data[relation.id] = {key: value for key, value in relation.data[relation.app].items() if key != "data"}
         return data
 
     def _update_relation_data(self, relation_id: int, data: dict) -> None:
@@ -494,12 +490,8 @@ class DataRequires(Object, ABC):
         self.local_app = self.charm.model.app
         self.local_unit = self.charm.unit
         self.relation_name = relation_name
-        self.framework.observe(
-            self.charm.on[relation_name].relation_joined, self._on_relation_joined_event
-        )
-        self.framework.observe(
-            self.charm.on[relation_name].relation_changed, self._on_relation_changed_event
-        )
+        self.framework.observe(self.charm.on[relation_name].relation_joined, self._on_relation_joined_event)
+        self.framework.observe(self.charm.on[relation_name].relation_changed, self._on_relation_changed_event)
 
     @abstractmethod
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
@@ -523,9 +515,7 @@ class DataRequires(Object, ABC):
         """
         data = {}
         for relation in self.relations:
-            data[relation.id] = {
-                key: value for key, value in relation.data[relation.app].items() if key != "data"
-            }
+            data[relation.id] = {key: value for key, value in relation.data[relation.app].items() if key != "data"}
         return data
 
     def _update_relation_data(self, relation_id: int, data: dict) -> None:
@@ -574,9 +564,7 @@ class DataRequires(Object, ABC):
 
     @staticmethod
     def _is_resource_created_for_relation(relation: Relation):
-        return (
-            "username" in relation.data[relation.app] and "password" in relation.data[relation.app]
-        )
+        return "username" in relation.data[relation.app] and "password" in relation.data[relation.app]
 
     def is_resource_created(self, relation_id: Optional[int] = None) -> bool:
         """Check if the resource has been created.
@@ -596,20 +584,13 @@ class DataRequires(Object, ABC):
         """
         if relation_id is not None:
             try:
-                relation = [relation for relation in self.relations if relation.id == relation_id][
-                    0
-                ]
+                relation = [relation for relation in self.relations if relation.id == relation_id][0]
                 return self._is_resource_created_for_relation(relation)
             except IndexError:
                 raise IndexError(f"relation id {relation_id} cannot be accessed")
         else:
             return (
-                all(
-                    [
-                        self._is_resource_created_for_relation(relation)
-                        for relation in self.relations
-                    ]
-                )
+                all([self._is_resource_created_for_relation(relation) for relation in self.relations])
                 if self.relations
                 else False
             )
@@ -878,9 +859,7 @@ class DatabaseRequires(DataRequires):
 
             for relation_alias in relations_aliases:
                 self.on.define_event(f"{relation_alias}_database_created", DatabaseCreatedEvent)
-                self.on.define_event(
-                    f"{relation_alias}_endpoints_changed", DatabaseEndpointsChangedEvent
-                )
+                self.on.define_event(f"{relation_alias}_endpoints_changed", DatabaseEndpointsChangedEvent)
                 self.on.define_event(
                     f"{relation_alias}_read_only_endpoints_changed",
                     DatabaseReadOnlyEndpointsChangedEvent,
@@ -900,11 +879,7 @@ class DatabaseRequires(DataRequires):
 
         # Return if an alias was already assigned to this relation
         # (like when there are more than one unit joining the relation).
-        if (
-            self.charm.model.get_relation(self.relation_name, relation_id)
-            .data[self.local_unit]
-            .get("alias")
-        ):
+        if self.charm.model.get_relation(self.relation_name, relation_id).data[self.local_unit].get("alias"):
             return
 
         # Retrieve the available aliases (the ones that weren't assigned to any relation).
@@ -928,9 +903,7 @@ class DatabaseRequires(DataRequires):
         """
         alias = self._get_relation_alias(event.relation.id)
         if alias:
-            getattr(self.on, f"{alias}_{event_name}").emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+            getattr(self.on, f"{alias}_{event_name}").emit(event.relation, app=event.app, unit=event.unit)
 
     def _get_relation_alias(self, relation_id: int) -> Optional[str]:
         """Returns the relation alias.
@@ -974,18 +947,14 @@ class DatabaseRequires(DataRequires):
         host = host.split(":")[0]
         user = relation_data.get("username")
         password = relation_data.get("password")
-        connection_string = (
-            f"host='{host}' dbname='{self.database}' user='{user}' password='{password}'"
-        )
+        connection_string = f"host='{host}' dbname='{self.database}' user='{user}' password='{password}'"
         try:
             with psycopg.connect(connection_string) as connection:
                 with connection.cursor() as cursor:
                     cursor.execute(f"SELECT TRUE FROM pg_extension WHERE extname='{plugin}';")
                     return cursor.fetchone() is not None
         except psycopg.Error as e:
-            logger.exception(
-                f"failed to check whether {plugin} plugin is enabled in the database: %s", str(e)
-            )
+            logger.exception(f"failed to check whether {plugin} plugin is enabled in the database: %s", str(e))
             return False
 
     def _on_relation_joined_event(self, event: RelationJoinedEvent) -> None:
@@ -1044,9 +1013,7 @@ class DatabaseRequires(DataRequires):
         if "read-only-endpoints" in diff.added or "read-only-endpoints" in diff.changed:
             # Emit the default event (the one without an alias).
             logger.info("read-only-endpoints changed on %s", datetime.now())
-            self.on.read_only_endpoints_changed.emit(
-                event.relation, app=event.app, unit=event.unit
-            )
+            self.on.read_only_endpoints_changed.emit(event.relation, app=event.app, unit=event.unit)
 
             # Emit the aliased event (if any).
             self._emit_aliased_event(event, "read_only_endpoints_changed")
@@ -1210,8 +1177,7 @@ class KafkaRequires(DataRequires):
         """Event emitted when the application joins the Kafka relation."""
         # Sets topic, extra user roles, and "consumer-group-prefix" in the relation
         relation_data = {
-            f: getattr(self, f.replace("-", "_"), "")
-            for f in ["consumer-group-prefix", "extra-user-roles", "topic"]
+            f: getattr(self, f.replace("-", "_"), "") for f in ["consumer-group-prefix", "extra-user-roles", "topic"]
         }
 
         self._update_relation_data(event.relation.id, relation_data)
@@ -1347,9 +1313,7 @@ class OpenSearchRequires(DataRequires):
 
     on = OpenSearchRequiresEvents()
 
-    def __init__(
-        self, charm, relation_name: str, index: str, extra_user_roles: Optional[str] = None
-    ):
+    def __init__(self, charm, relation_name: str, index: str, extra_user_roles: Optional[str] = None):
         """Manager of OpenSearch client relations."""
         super().__init__(charm, relation_name, extra_user_roles)
         self.charm = charm
