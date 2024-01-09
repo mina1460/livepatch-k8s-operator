@@ -24,7 +24,7 @@ class MockOutput:
         self._stderr = stderr
 
     def wait_output(self):
-        """return the stdout and stderr from running the command."""
+        """Return the stdout and stderr from running the command."""
         return self._stdout, self._stderr
 
 
@@ -162,7 +162,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_logrotate_config_pushed(self):
-        """assure that logrotate config is pushed."""
+        """Assure that logrotate config is pushed."""
         # Trigger config-changed so that logrotate config gets written
         self.harness.charm.on.config_changed.emit()
 
@@ -172,7 +172,7 @@ class TestCharm(unittest.TestCase):
         self.assertIn("/var/log/livepatch {", config)
 
     def test_database_relations_are_mutually_exclusive__legacy_first(self):
-        """ "assure that database relations are mutually exclusive."""
+        """Assure that database relations are mutually exclusive."""
         self.harness.set_leader(True)
         self.harness.enable_hooks()
 
@@ -204,7 +204,7 @@ class TestCharm(unittest.TestCase):
         )
 
     def test_database_relations_are_mutually_exclusive__standard_first(self):
-        """ "assure that database relations are mutually exclusive."""
+        """Assure that database relations are mutually exclusive."""
         self.harness.set_leader(True)
         self.harness.enable_hooks()
 
