@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class TestDeployment:
     """A wrapper class for deployment tests"""
 
+    @pytest.mark.skip("Pass until the action that uploads the oci images as artifacts in the server is merged.")
     async def test_application_is_up(self, ops_test: OpsTest):
         """The app is up and running."""
 
