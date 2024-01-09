@@ -52,18 +52,13 @@ class TestCharm(unittest.TestCase):
         self.harness.add_oci_resource("livepatch-server-image")
         self.harness.add_oci_resource("livepatch-schema-upgrade-tool-image")
         self.harness.begin()
-
-        with tempfile.TemporaryDirectory() as tempdir:
-            self.tempdir = tempdir
-            self.harness.charm.framework.charm_dir = pathlib.Path(self.tempdir)
-
-        # self.harness.container_pebble_ready("livepatch")
-        # self.harness.container_pebble_ready("livepatch-schema-upgrade")
+        rel_id = self.harness.add_relation("livepatch", "livepatch")
+        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
+        self.harness.container_pebble_ready("livepatch")
+        self.harness.container_pebble_ready("livepatch-schema-upgrade")
 
     def test_on_config_changed(self):
         """A test for config changed hook."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
@@ -103,8 +98,6 @@ class TestCharm(unittest.TestCase):
 
     def test_missing_url_template_config_causes_blocked_state(self):
         """A test for missing url template."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
@@ -137,8 +130,6 @@ class TestCharm(unittest.TestCase):
 
     def test_missing_sync_token_causes_blocked_state(self):
         """For on-prem servers, a missing sync token should cause a blocked state."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
@@ -174,9 +165,6 @@ class TestCharm(unittest.TestCase):
 
     def test_logrotate_config_pushed(self):
         """assure that logrotate config is pushed."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, "canonical-livepatch-server-k8s/1")
-
         # Trigger config-changed so that logrotate config gets written
         self.harness.charm.on.config_changed.emit()
 
@@ -187,8 +175,6 @@ class TestCharm(unittest.TestCase):
 
     def test_database_relations_are_mutually_exclusive__legacy_first(self):
         """ "assure that database relations are mutually exclusive."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
         self.harness.enable_hooks()
 
@@ -221,8 +207,6 @@ class TestCharm(unittest.TestCase):
 
     def test_database_relations_are_mutually_exclusive__standard_first(self):
         """ "assure that database relations are mutually exclusive."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
         self.harness.enable_hooks()
 
@@ -255,8 +239,6 @@ class TestCharm(unittest.TestCase):
 
     def test_postgres_patch_storage_config_sets_in_container(self):
         """A test for postgres patch storage config in container."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
 
         self.harness.charm._state.dsn = "postgres://123"
@@ -291,8 +273,6 @@ class TestCharm(unittest.TestCase):
 
     def test_postgres_patch_storage_config_defaults_to_database_relation(self):
         """A test for postgres patch storage config."""
-        rel_id = self.harness.add_relation("livepatch", "livepatch")
-        self.harness.add_relation_unit(rel_id, f"{APP_NAME}/1")
         self.harness.set_leader(True)
         self.harness.enable_hooks()
 
