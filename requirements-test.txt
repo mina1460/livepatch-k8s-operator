@@ -1,6 +1,0 @@
-pytest
-pytest-operator
-pytest-order
-pytest-sugar
-pytest-asyncio
-juju

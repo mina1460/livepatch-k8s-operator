@@ -1,8 +1,5 @@
 cosl
-juju
 ops
 ops-lib-pgsql
-pytest
-pytest_asyncio
 requests
 responses
