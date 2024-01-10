@@ -27,7 +27,7 @@ jobs:
         uses: canonical/charming-actions/upload-charm@main
         with:
           credentials: "${{ secrets.CHARMCRAFT_AUTH }}"
-          github-token: "${{ secrets.GH_PAT }}"
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
           channel: "latest/edge"
           pull-image: "false"
           tag-prefix: "k8s"
