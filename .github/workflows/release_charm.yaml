@@ -13,6 +13,7 @@ jobs:
     steps:
       - name: load images into local docker registry
         run: |
+          sudo apt install curl
           curl -L \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
