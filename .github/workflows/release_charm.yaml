@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       artifact_id:
-        type: string
+        type: number
         required: true
 
 jobs:
@@ -20,6 +20,8 @@ jobs:
       - name: load images into local docker registry
         run: |
           echo "artifact_id: ${{ inputs.artifact_id }}"
+          ls -la
+          tar -xzvf artifact.zip 
           docker load -i livepatch-server.tar
           docker load -i schema-tool.tar
 
