@@ -13,7 +13,6 @@ jobs:
     steps:
       - name: load images into local docker registry
         run: |
-          sudo apt install curl
           curl -L \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: Bearer ${{ secrets.GH_PAT }}" \
@@ -22,7 +21,11 @@ jobs:
           unzip artifact.zip
           docker load -i livepatch-server.tar
           docker load -i schema-tool.tar
+          sudo apt install snapd
+          sudo snap install charmcraft --classic
 
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Upload charm to charmhub
         uses: canonical/charming-actions/upload-charm@main
         with:
