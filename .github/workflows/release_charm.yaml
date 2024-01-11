@@ -23,6 +23,8 @@ jobs:
           docker load -i livepatch-server.tar
           docker load -i schema-tool.tar
 
+      - name: Checkout
+        uses: actions/checkout@v3
       - name: Upload charm to charmhub
         uses: canonical/charming-actions/upload-charm@main
         with:
